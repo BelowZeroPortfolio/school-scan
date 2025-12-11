@@ -1,0 +1,36 @@
+# Environment files
+.env
+
+# Composer
+/vendor/
+
+# Node modules
+/node_modules/
+
+# Generated files
+/storage/barcodes/*.png
+/storage/barcodes/*.jpg
+/storage/exports/*
+!/storage/barcodes/.gitkeep
+!/storage/exports/.gitkeep
+
+# Compiled CSS
+/assets/css/output.css
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp

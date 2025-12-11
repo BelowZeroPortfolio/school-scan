@@ -1,0 +1,19 @@
+{
+  "name": "barcode-attendance-system",
+  "version": "1.0.0",
+  "description": "Barcode-based student attendance tracking system",
+  "scripts": {
+    "build": "tailwindcss -i ./assets/css/app.css -o ./assets/css/output.css --minify",
+    "watch": "tailwindcss -i ./assets/css/app.css -o ./assets/css/output.css --watch"
+  },
+  "keywords": [
+    "attendance",
+    "barcode",
+    "education"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "tailwindcss": "^3.4.0"
+  }
+}
