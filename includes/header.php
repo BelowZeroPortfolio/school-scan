@@ -9,8 +9,15 @@ if (!function_exists('isLoggedIn')) {
     require_once __DIR__ . '/auth.php';
 }
 
+// Load school year module for header display
+require_once __DIR__ . '/schoolyear.php';
+
 $currentUser = getCurrentUser();
 $currentPage = basename($_SERVER['PHP_SELF']);
+
+// Get active school year for header display (Requirements: 1.4)
+$activeSchoolYear = getActiveSchoolYear();
+$allSchoolYears = getAllSchoolYears();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -132,6 +139,56 @@ $currentPage = basename($_SERVER['PHP_SELF']);
                     
                     <!-- Right Side -->
                     <div class="flex items-center gap-2">
+                        <!-- School Year Selector (Requirements: 1.4) -->
+                        <?php if ($activeSchoolYear || !empty($allSchoolYears)): ?>
+                        <div class="relative" x-data="{ schoolYearOpen: false }">
+                            <button @click="schoolYearOpen = !schoolYearOpen" 
+                                    class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium theme-text-secondary hover:bg-gray-50 dark-mode:hover:bg-gray-700 transition-colors border border-gray-200 dark-mode:border-gray-600">
+                                <svg class="w-4 h-4 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                </svg>
+                                <span class="hidden sm:inline"><?php echo $activeSchoolYear ? e($activeSchoolYear['name']) : 'No Active Year'; ?></span>
+                                <svg class="w-3 h-3 theme-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                </svg>
+                            </button>
+                            
+                            <!-- School Year Dropdown -->
+                            <div x-show="schoolYearOpen" @click.away="schoolYearOpen = false" x-transition x-cloak 
+                                 class="absolute right-0 top-full mt-2 w-48 theme-bg-card rounded-xl shadow-xl py-2 z-[60] theme-border border">
+                                <div class="px-4 py-2 theme-border border-b">
+                                    <span class="text-xs font-semibold theme-text-muted uppercase tracking-wider">School Year</span>
+                                </div>
+                                <?php if (empty($allSchoolYears)): ?>
+                                    <div class="px-4 py-3 text-sm theme-text-muted">No school years configured</div>
+                                <?php else: ?>
+                                    <?php foreach ($allSchoolYears as $sy): ?>
+                                        <div class="px-4 py-2 text-sm flex items-center justify-between <?php echo $sy['is_active'] ? 'bg-violet-50 dark-mode:bg-violet-900/20' : 'hover:bg-gray-50 dark-mode:hover:bg-gray-700'; ?>">
+                                            <span class="<?php echo $sy['is_active'] ? 'font-semibold text-violet-700 dark-mode:text-violet-300' : 'theme-text-secondary'; ?>">
+                                                <?php echo e($sy['name']); ?>
+                                            </span>
+                                            <?php if ($sy['is_active']): ?>
+                                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-violet-100 text-violet-700 dark-mode:bg-violet-800 dark-mode:text-violet-200">Active</span>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                                <?php if (hasRole('admin')): ?>
+                                    <div class="theme-border border-t mt-2 pt-2">
+                                        <a href="<?php echo config('app_url'); ?>/pages/school-years.php" 
+                                           class="flex items-center gap-2 px-4 py-2 text-sm theme-text-secondary hover:bg-gray-50 dark-mode:hover:bg-gray-700 transition-colors">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                            </svg>
+                                            Manage School Years
+                                        </a>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                        
                         <!-- Theme Toggle -->
                         <button id="themeToggle" class="p-2 rounded-lg hover:bg-gray-100 dark-mode:hover:bg-gray-700 transition-colors" aria-label="Toggle theme">
                             <svg class="w-5 h-5 text-yellow-500 dark-only" fill="currentColor" viewBox="0 0 20 20">

@@ -2,6 +2,8 @@
 /**
  * Dashboard Page
  * Display attendance statistics and trends
+ * 
+ * Requirements: 7.1, 10.4 - Filter stats by teacher's classes for teacher role
  */
 
 // Load required files
@@ -10,6 +12,8 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/attendance.php';
+require_once __DIR__ . '/../includes/schoolyear.php';
+require_once __DIR__ . '/../includes/classes.php';
 
 // Require authentication
 requireAuth();
@@ -17,12 +21,57 @@ requireAuth();
 // Get current user for role-based filtering
 $currentUser = getCurrentUser();
 $userRole = $currentUser['role'] ?? 'viewer';
+$userId = $currentUser['id'] ?? null;
 
-// Get today's statistics
-$todayStats = getTodayAttendanceStats();
+// Get active school year (Requirements: 7.1, 10.4)
+$activeSchoolYear = getActiveSchoolYear();
+$schoolYearId = $activeSchoolYear ? $activeSchoolYear['id'] : null;
 
-// Get recent attendance records (last 10)
-$recentAttendance = getRecentAttendance(1, 10);
+// Initialize variables for teacher-specific filtering
+$teacherClasses = [];
+$classBreakdown = [];
+
+// Get today's statistics - filtered by teacher's classes if teacher role (Requirements: 7.1)
+if (isTeacher() && $userId) {
+    // Get teacher's classes for the active school year
+    $teacherClasses = getTeacherClasses($userId, $schoolYearId);
+    $classIds = array_column($teacherClasses, 'id');
+    
+    if (!empty($classIds)) {
+        // Get stats filtered by teacher's classes
+        $todayStats = getTodayAttendanceStatsForClasses($classIds, $schoolYearId);
+        $recentAttendance = getRecentAttendanceForClasses($classIds, 1, 10, $schoolYearId);
+    } else {
+        // No classes assigned - show empty stats
+        $todayStats = [
+            'total_students' => 0,
+            'present' => 0,
+            'late' => 0,
+            'percentage' => 0
+        ];
+        $recentAttendance = ['records' => [], 'total' => 0, 'total_pages' => 0];
+    }
+} else {
+    // Admin/Operator/Viewer - show all stats
+    $todayStats = getTodayAttendanceStats($schoolYearId);
+    $recentAttendance = getRecentAttendance(1, 10, $schoolYearId);
+    
+    // Get class breakdown for admin (Requirements: 10.4)
+    if (isAdmin() && $schoolYearId) {
+        $allClasses = getClassesBySchoolYear($schoolYearId);
+        foreach ($allClasses as $class) {
+            $classStats = getTodayAttendanceStatsForClasses([$class['id']], $schoolYearId);
+            $classBreakdown[] = [
+                'class_name' => $class['grade_level'] . ' - ' . $class['section'],
+                'teacher_name' => $class['teacher_name'],
+                'total_students' => $classStats['total_students'],
+                'present' => $classStats['present'],
+                'late' => $classStats['late'],
+                'percentage' => $classStats['percentage']
+            ];
+        }
+    }
+}
 
 // Calculate absent count for today
 $absentToday = $todayStats['total_students'] - $todayStats['present'] - $todayStats['late'];
@@ -180,6 +229,80 @@ $pageTitle = 'Dashboard';
                     </div>
                 </div>
             </div>
+
+            <!-- Class Breakdown for Admin (Requirements: 10.4) -->
+            <?php if (isAdmin() && !empty($classBreakdown)): ?>
+            <div class="bg-white rounded-xl border border-gray-100 mb-6 sm:mb-8">
+                <div class="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-100">
+                    <h3 class="text-base sm:text-lg font-semibold text-gray-900">Class Breakdown</h3>
+                    <p class="text-xs sm:text-sm text-gray-500 mt-1">Today's attendance by class<?php echo $activeSchoolYear ? ' - ' . e($activeSchoolYear['name']) : ''; ?></p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-100">
+                        <thead>
+                            <tr class="bg-gray-50/50">
+                                <th class="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
+                                <th class="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teacher</th>
+                                <th class="px-4 sm:px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Students</th>
+                                <th class="px-4 sm:px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Present</th>
+                                <th class="px-4 sm:px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Late</th>
+                                <th class="px-4 sm:px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Rate</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-100">
+                            <?php foreach ($classBreakdown as $classData): ?>
+                                <tr class="hover:bg-gray-50/50 transition-colors">
+                                    <td class="px-4 sm:px-6 py-3 whitespace-nowrap">
+                                        <span class="text-sm font-medium text-gray-900"><?php echo e($classData['class_name']); ?></span>
+                                    </td>
+                                    <td class="px-4 sm:px-6 py-3 whitespace-nowrap">
+                                        <span class="text-sm text-gray-600"><?php echo e($classData['teacher_name']); ?></span>
+                                    </td>
+                                    <td class="px-4 sm:px-6 py-3 whitespace-nowrap text-center">
+                                        <span class="text-sm text-gray-900"><?php echo number_format($classData['total_students']); ?></span>
+                                    </td>
+                                    <td class="px-4 sm:px-6 py-3 whitespace-nowrap text-center">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700"><?php echo number_format($classData['present']); ?></span>
+                                    </td>
+                                    <td class="px-4 sm:px-6 py-3 whitespace-nowrap text-center">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700"><?php echo number_format($classData['late']); ?></span>
+                                    </td>
+                                    <td class="px-4 sm:px-6 py-3 whitespace-nowrap text-center">
+                                        <span class="text-sm font-medium <?php echo $classData['percentage'] >= 80 ? 'text-green-600' : ($classData['percentage'] >= 60 ? 'text-amber-600' : 'text-red-600'); ?>">
+                                            <?php echo number_format($classData['percentage'], 1); ?>%
+                                        </span>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <!-- Teacher's Classes Summary (Requirements: 7.1) -->
+            <?php if (isTeacher() && !empty($teacherClasses)): ?>
+            <div class="bg-white rounded-xl border border-gray-100 mb-6 sm:mb-8">
+                <div class="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-100">
+                    <h3 class="text-base sm:text-lg font-semibold text-gray-900">My Classes</h3>
+                    <p class="text-xs sm:text-sm text-gray-500 mt-1"><?php echo $activeSchoolYear ? e($activeSchoolYear['name']) : 'No active school year'; ?></p>
+                </div>
+                <div class="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <?php foreach ($teacherClasses as $class): ?>
+                        <a href="<?php echo config('app_url'); ?>/pages/class-students.php?id=<?php echo $class['id']; ?>" 
+                           class="block p-4 border border-gray-200 rounded-xl hover:border-violet-300 hover:bg-violet-50/50 transition-all">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-semibold text-gray-900"><?php echo e($class['grade_level'] . ' - ' . $class['section']); ?></span>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700">
+                                    <?php echo number_format($class['student_count']); ?> students
+                                </span>
+                            </div>
+                            <p class="text-xs text-gray-500">Click to view students</p>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
 
             <!-- Recent Attendance Table -->
             <div class="bg-white rounded-xl border border-gray-100">

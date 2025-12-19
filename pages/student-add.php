@@ -2,6 +2,8 @@
 /**
  * Add Student Page
  * Form to create new student with barcode generation
+ * 
+ * Requirements: 6.2 - Add class selection dropdown, for teacher role show only their classes
  */
 
 require_once __DIR__ . '/../config/config.php';
@@ -10,9 +12,29 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/barcode.php';
+require_once __DIR__ . '/../includes/schoolyear.php';
+require_once __DIR__ . '/../includes/classes.php';
 
-// Require authentication and appropriate role
-requireAnyRole(['admin', 'operator']);
+// Require authentication and appropriate role (including teacher)
+requireAnyRole(['admin', 'operator', 'teacher']);
+
+// Get current user info
+$currentUser = getCurrentUser();
+$userId = $currentUser['id'] ?? null;
+
+// Get active school year
+$activeSchoolYear = getActiveSchoolYear();
+$schoolYearId = $activeSchoolYear ? $activeSchoolYear['id'] : null;
+
+// Get available classes for dropdown (Requirements: 6.2)
+$availableClasses = [];
+if (isTeacher() && $userId) {
+    // Teachers see only their classes
+    $availableClasses = getTeacherClasses($userId, $schoolYearId);
+} else {
+    // Admin/Operator see all classes for active school year
+    $availableClasses = getClassesBySchoolYear($schoolYearId);
+}
 
 $errors = [];
 $formData = [];
@@ -41,8 +63,7 @@ if (isPost()) {
         'lrn' => sanitizeString($_POST['lrn'] ?? ''),
         'first_name' => sanitizeString($_POST['first_name'] ?? ''),
         'last_name' => sanitizeString($_POST['last_name'] ?? ''),
-        'grade' => sanitizeString($_POST['grade'] ?? ''),
-        'section' => sanitizeString($_POST['section'] ?? ''),
+        'class_id' => isset($_POST['class_id']) && $_POST['class_id'] !== '' ? (int)$_POST['class_id'] : null,
         'parent_name' => sanitizeString($_POST['parent_name'] ?? ''),
         'parent_phone' => $rawPhone,
         'parent_email' => sanitizeEmail($_POST['parent_email'] ?? ''),
@@ -51,7 +72,7 @@ if (isPost()) {
     ];
 
     // Validate required fields
-    $required = ['lrn', 'first_name', 'last_name', 'grade', 'parent_name', 'parent_phone', 'address'];
+    $required = ['lrn', 'first_name', 'last_name', 'parent_name', 'parent_phone', 'address'];
     $missing = validateRequired($required, $formData);
     
     if (!empty($missing)) {
@@ -61,11 +82,6 @@ if (isPost()) {
     // Validate LRN format (12 digits)
     if ($formData['lrn'] && !preg_match('/^\d{12}$/', $formData['lrn'])) {
         $errors['lrn'] = 'LRN must be exactly 12 digits.';
-    }
-    
-    // Validate grade
-    if ($formData['grade'] && !in_array($formData['grade'], ['7', '8', '9', '10', '11', '12'])) {
-        $errors['grade'] = 'Please select a valid grade level.';
     }
     
     // Validate email if provided
@@ -95,23 +111,25 @@ if (isPost()) {
         try {
             dbBeginTransaction();
             
+            // Generate unique student ID (STU-YYYY-NNNN format)
+            $studentCode = generateStudentId();
+            
             // Generate barcode using LRN
             $barcodePath = generateStudentBarcode($formData['lrn']);
             
-            // Insert student record (student_id = lrn for compatibility)
+            // Insert student record
+            // Note: class/section now comes from student_classes -> classes relationship
             $sql = "INSERT INTO students (
-                        student_id, lrn, first_name, last_name, class, section,
+                        student_id, lrn, first_name, last_name,
                         barcode_path, parent_name, parent_phone, parent_email,
                         address, date_of_birth, is_active
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)";
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)";
             
             $params = [
-                $formData['lrn'], // Use LRN as student_id for compatibility
+                $studentCode,
                 $formData['lrn'],
                 $formData['first_name'],
                 $formData['last_name'],
-                'Grade ' . $formData['grade'],
-                $formData['section'],
                 $barcodePath,
                 $formData['parent_name'],
                 $formData['parent_phone'],
@@ -121,13 +139,28 @@ if (isPost()) {
             ];
             
             $studentId = dbInsert($sql, $params);
+            
+            // Auto-enroll student in selected class (Requirements: 6.2)
+            if ($formData['class_id'] && $studentId) {
+                $enrollResult = assignStudentToClass($studentId, $formData['class_id'], $userId);
+                if (!$enrollResult) {
+                    // Log warning but don't fail - student was created
+                    if (function_exists('logWarning')) {
+                        logWarning('Failed to auto-enroll student in class', [
+                            'student_id' => $studentId,
+                            'class_id' => $formData['class_id']
+                        ]);
+                    }
+                }
+            }
+            
             dbCommit();
             
             if (function_exists('logInfo')) {
-                logInfo('Student created', ['student_id' => $studentId, 'lrn' => $formData['lrn']]);
+                logInfo('Student created', ['student_id' => $studentId, 'student_code' => $studentCode, 'lrn' => $formData['lrn'], 'class_id' => $formData['class_id']]);
             }
             
-            setFlash('success', 'Student added successfully!');
+            setFlash('success', 'Student added successfully!' . ($formData['class_id'] ? ' Student enrolled in class.' : ''));
             redirect(config('app_url') . '/pages/student-view.php?id=' . $studentId);
             
         } catch (Exception $e) {
@@ -232,33 +265,58 @@ $currentUser = getCurrentUser();
                                 class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500">
                         </div>
                         
-                        <!-- Grade -->
-                        <div>
-                            <label for="grade" class="block text-sm font-medium text-gray-700 mb-1">
-                                Grade Level <span class="text-red-500">*</span>
+                        <!-- Class Enrollment (Required) -->
+                        <?php if (!empty($availableClasses)): ?>
+                        <div class="sm:col-span-2">
+                            <label for="class_id" class="block text-sm font-medium text-gray-700 mb-1">
+                                Class <span class="text-red-500">*</span>
+                                <?php if ($activeSchoolYear): ?>
+                                    <span class="text-gray-400 text-xs font-normal">(<?php echo e($activeSchoolYear['name']); ?>)</span>
+                                <?php endif; ?>
                             </label>
-                            <select name="grade" id="grade" required
-                                class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 <?php echo isset($errors['grade']) ? 'border-red-300' : ''; ?>">
-                                <option value="">Select Grade</option>
-                                <?php for ($g = 7; $g <= 12; $g++): ?>
-                                    <option value="<?php echo $g; ?>" <?php echo ($formData['grade'] ?? '') == $g ? 'selected' : ''; ?>>
-                                        Grade <?php echo $g; ?>
+                            <select name="class_id" id="class_id" required
+                                class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500">
+                                <option value="">— Select a class —</option>
+                                <?php foreach ($availableClasses as $class): ?>
+                                    <option value="<?php echo $class['id']; ?>" <?php echo ($formData['class_id'] ?? '') == $class['id'] ? 'selected' : ''; ?>>
+                                        <?php echo e($class['grade_level'] . ' - ' . $class['section']); ?>
+                                        <?php if (!isTeacher()): ?>
+                                            (<?php echo e($class['teacher_name']); ?>)
+                                        <?php endif; ?>
                                     </option>
-                                <?php endfor; ?>
+                                <?php endforeach; ?>
                             </select>
-                            <?php if (isset($errors['grade'])): ?>
-                                <p class="mt-1 text-sm text-red-600"><?php echo e($errors['grade']); ?></p>
-                            <?php endif; ?>
+                            <p class="mt-1 text-xs text-gray-500">
+                                <?php if (isTeacher()): ?>
+                                    Student will be enrolled in your selected class
+                                <?php else: ?>
+                                    Select the class for the current school year
+                                <?php endif; ?>
+                            </p>
                         </div>
-                        
-                        <!-- Section -->
-                        <div>
-                            <label for="section" class="block text-sm font-medium text-gray-700 mb-1">Section</label>
-                            <input type="text" name="section" id="section"
-                                value="<?php echo e($formData['section'] ?? ''); ?>"
-                                class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500"
-                                placeholder="e.g., Einstein, Newton">
+                        <?php elseif (!$activeSchoolYear): ?>
+                        <div class="sm:col-span-2">
+                            <div class="rounded-lg bg-amber-50 border border-amber-200 p-3">
+                                <p class="text-sm text-amber-700">
+                                    <svg class="inline-block w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                    </svg>
+                                    No active school year. Set an active school year before adding students.
+                                </p>
+                            </div>
                         </div>
+                        <?php else: ?>
+                        <div class="sm:col-span-2">
+                            <div class="rounded-lg bg-amber-50 border border-amber-200 p-3">
+                                <p class="text-sm text-amber-700">
+                                    <svg class="inline-block w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                    </svg>
+                                    No classes available. Please create a class first.
+                                </p>
+                            </div>
+                        </div>
+                        <?php endif; ?>
                     </div>
                 </div>
 
@@ -360,9 +418,9 @@ document.addEventListener('DOMContentLoaded', function() {
             message: 'Last name must be at least 2 characters',
             required: true
         },
-        grade: {
-            validate: (value) => ['7', '8', '9', '10', '11', '12'].includes(value),
-            message: 'Please select a grade level',
+        class_id: {
+            validate: (value) => value && value !== '',
+            message: 'Please select a class',
             required: true
         },
         parent_name: {

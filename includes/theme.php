@@ -249,6 +249,70 @@
     .dark-mode button#themeToggle:hover {
         background-color: rgba(255, 255, 255, 0.1);
     }
+    
+    /* Violet backgrounds for dark mode */
+    .dark-mode .bg-violet-50 {
+        background-color: rgba(139, 92, 246, 0.15) !important;
+    }
+    
+    .dark-mode .bg-violet-100 {
+        background-color: rgba(139, 92, 246, 0.2) !important;
+    }
+    
+    .dark-mode .text-violet-700 {
+        color: #c4b5fd !important;
+    }
+    
+    .dark-mode .text-violet-600 {
+        color: #a78bfa !important;
+    }
+    
+    .dark-mode .text-violet-900 {
+        color: #ede9fe !important;
+    }
+    
+    .dark-mode .border-violet-100,
+    .dark-mode .border-violet-200 {
+        border-color: rgba(139, 92, 246, 0.3) !important;
+    }
+    
+    .dark-mode .hover\:bg-violet-50:hover {
+        background-color: rgba(139, 92, 246, 0.2) !important;
+    }
+    
+    .dark-mode .hover\:text-violet-800:hover {
+        color: #ddd6fe !important;
+    }
+    
+    /* Amber/Warning backgrounds for dark mode */
+    .dark-mode .bg-amber-50 {
+        background-color: rgba(245, 158, 11, 0.1) !important;
+    }
+    
+    .dark-mode .text-amber-700 {
+        color: #fcd34d !important;
+    }
+    
+    .dark-mode .border-amber-200,
+    .dark-mode .border-amber-500 {
+        border-color: rgba(245, 158, 11, 0.4) !important;
+    }
+    
+    /* Disabled button states for dark mode */
+    .dark-mode button:disabled,
+    .dark-mode .disabled\:bg-gray-300:disabled {
+        background-color: rgb(55, 65, 81) !important;
+        color: #6b7280 !important;
+    }
+    
+    /* Selected student item highlight in dark mode */
+    .dark-mode .student-item.bg-violet-50 {
+        background-color: rgba(139, 92, 246, 0.15) !important;
+    }
+    
+    .dark-mode .student-item:hover {
+        background-color: rgba(139, 92, 246, 0.1) !important;
+    }
 </style>
 
 <script>

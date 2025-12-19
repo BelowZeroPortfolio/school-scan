@@ -2,50 +2,146 @@
 /**
  * Students List Page
  * Display all students with pagination and search
+ * 
+ * Requirements: 6.1, 10.1 - Filter by teacher's classes for teacher role
  */
 
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/schoolyear.php';
+require_once __DIR__ . '/../includes/classes.php';
 
 // Require authentication
 requireAuth();
 
-// Get search and pagination parameters
+// Get current user info
+$currentUser = getCurrentUser();
+$userRole = $currentUser['role'] ?? 'viewer';
+$userId = $currentUser['id'] ?? null;
+
+// Get active school year and all school years for filter
+$activeSchoolYear = getActiveSchoolYear();
+$allSchoolYears = getAllSchoolYears();
+
+// Get filter parameters
 $search = sanitizeString($_GET['search'] ?? '');
+$selectedSchoolYearId = isset($_GET['school_year']) && $_GET['school_year'] !== '' ? (int)$_GET['school_year'] : ($activeSchoolYear ? $activeSchoolYear['id'] : null);
+$selectedClassId = isset($_GET['class_id']) && $_GET['class_id'] !== '' ? (int)$_GET['class_id'] : null;
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 20;
 $offset = ($page - 1) * $perPage;
 
-// Build query with search
-$whereClause = '';
-$params = [];
-
-if ($search) {
-    $whereClause = "WHERE (student_id LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR class LIKE ?)";
-    $searchParam = '%' . $search . '%';
-    $params = [$searchParam, $searchParam, $searchParam, $searchParam];
+// Get available classes for filter dropdown
+$availableClasses = [];
+if (isTeacher() && $userId) {
+    // Teachers see only their classes (Requirements: 6.1)
+    $availableClasses = getTeacherClasses($userId, $selectedSchoolYearId);
+} else {
+    // Admin/Operator see all classes for selected school year
+    $availableClasses = getClassesBySchoolYear($selectedSchoolYearId);
 }
 
-// Get total count
-$countSql = "SELECT COUNT(*) as total FROM students " . $whereClause;
-$countResult = dbFetchOne($countSql, $params);
-$totalStudents = $countResult['total'];
+// Build query based on role and filters
+$students = [];
+$totalStudents = 0;
+
+if (isTeacher() && $userId) {
+    // Teacher: Show only students in their classes (Requirements: 6.1)
+    $teacherStudents = getTeacherStudents($userId, $selectedSchoolYearId);
+    
+    // Apply search filter
+    if ($search) {
+        $searchLower = strtolower($search);
+        $teacherStudents = array_filter($teacherStudents, function($s) use ($searchLower) {
+            return strpos(strtolower($s['student_code']), $searchLower) !== false ||
+                   strpos(strtolower($s['first_name']), $searchLower) !== false ||
+                   strpos(strtolower($s['last_name']), $searchLower) !== false ||
+                   strpos(strtolower($s['lrn'] ?? ''), $searchLower) !== false;
+        });
+    }
+    
+    // Apply class filter
+    if ($selectedClassId) {
+        $teacherStudents = array_filter($teacherStudents, function($s) use ($selectedClassId) {
+            return $s['class_id'] == $selectedClassId;
+        });
+    }
+    
+    $totalStudents = count($teacherStudents);
+    $students = array_slice(array_values($teacherStudents), $offset, $perPage);
+} else {
+    // Admin/Operator: Show all students with optional filters (Requirements: 10.1)
+    $whereConditions = ['s.is_active = 1'];
+    $params = [];
+    $joinClause = '';
+    
+    // Add school year and class filtering via student_classes
+    if ($selectedSchoolYearId || $selectedClassId) {
+        $joinClause = "LEFT JOIN student_classes sc ON s.id = sc.student_id AND sc.is_active = 1
+                       LEFT JOIN classes c ON sc.class_id = c.id AND c.is_active = 1
+                       LEFT JOIN users t ON c.teacher_id = t.id";
+        
+        if ($selectedSchoolYearId) {
+            $whereConditions[] = 'c.school_year_id = ?';
+            $params[] = $selectedSchoolYearId;
+        }
+        
+        if ($selectedClassId) {
+            $whereConditions[] = 'c.id = ?';
+            $params[] = $selectedClassId;
+        }
+    }
+    
+    // Add search filter
+    if ($search) {
+        $searchParam = '%' . $search . '%';
+        $whereConditions[] = "(s.student_id LIKE ? OR s.first_name LIKE ? OR s.last_name LIKE ? OR s.lrn LIKE ?)";
+        $params = array_merge($params, [$searchParam, $searchParam, $searchParam, $searchParam]);
+    }
+    
+    $whereClause = 'WHERE ' . implode(' AND ', $whereConditions);
+    
+    // Get total count
+    $countSql = "SELECT COUNT(DISTINCT s.id) as total FROM students s {$joinClause} {$whereClause}";
+    $countResult = dbFetchOne($countSql, $params);
+    $totalStudents = $countResult['total'];
+    
+    // Get students for current page with class info
+    $params[] = $perPage;
+    $params[] = $offset;
+    
+    if ($selectedSchoolYearId || $selectedClassId) {
+        $sql = "SELECT DISTINCT s.id, s.student_id, s.lrn, s.first_name, s.last_name,
+                       s.parent_phone, s.parent_email, s.is_active, s.created_at,
+                       c.id AS class_id, c.grade_level, c.section AS class_section,
+                       t.full_name AS teacher_name
+                FROM students s
+                {$joinClause}
+                {$whereClause}
+                ORDER BY s.last_name, s.first_name
+                LIMIT ? OFFSET ?";
+    } else {
+        // Join with classes to get current class info
+        $sql = "SELECT s.id, s.student_id, s.lrn, s.first_name, s.last_name,
+                       s.parent_phone, s.parent_email, s.is_active, s.created_at,
+                       c.id AS class_id, c.grade_level, c.section AS class_section,
+                       t.full_name AS teacher_name
+                FROM students s
+                LEFT JOIN student_classes sc ON s.id = sc.student_id AND sc.is_active = 1
+                LEFT JOIN classes c ON sc.class_id = c.id AND c.is_active = 1
+                LEFT JOIN school_years sy ON c.school_year_id = sy.id AND sy.is_active = 1
+                LEFT JOIN users t ON c.teacher_id = t.id
+                {$whereClause}
+                ORDER BY s.last_name, s.first_name
+                LIMIT ? OFFSET ?";
+    }
+    
+    $students = dbFetchAll($sql, $params);
+}
+
 $totalPages = ceil($totalStudents / $perPage);
-
-// Get students for current page
-$sql = "SELECT id, student_id, first_name, last_name, class, section, 
-               parent_phone, parent_email, is_active, created_at
-        FROM students 
-        " . $whereClause . "
-        ORDER BY last_name, first_name
-        LIMIT ? OFFSET ?";
-
-$params[] = $perPage;
-$params[] = $offset;
-$students = dbFetchAll($sql, $params);
-
 $pageTitle = 'Students';
 ?>
 
@@ -64,7 +160,7 @@ $pageTitle = 'Students';
                         <h1 class="text-3xl font-semibold text-gray-900 tracking-tight">Students</h1>
                         <p class="text-gray-500 mt-1">Manage student records and information</p>
                     </div>
-                    <?php if (hasAnyRole(['admin', 'operator'])): ?>
+                    <?php if (hasAnyRole(['admin', 'operator', 'teacher'])): ?>
                         <a href="<?php echo config('app_url'); ?>/pages/student-add.php" class="inline-flex items-center px-4 py-2.5 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700 transition-colors shadow-sm">
                             <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -77,29 +173,64 @@ $pageTitle = 'Students';
             
             <?php echo displayFlash(); ?>
             
-            <!-- Search Form -->
-            <div class="mb-6">
-                <form method="GET" action="" class="flex gap-3">
-                    <div class="flex-1 relative">
-                        <input 
-                            type="text" 
-                            name="search" 
-                            placeholder="Search by ID, name, or class..." 
-                            value="<?php echo e($search); ?>"
-                            class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                        >
-                        <svg class="w-5 h-5 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                        </svg>
+            <!-- Filters Section -->
+            <div class="bg-white rounded-xl p-4 sm:p-6 border border-gray-100 mb-6">
+                <form method="GET" action="" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <!-- Search -->
+                    <div class="lg:col-span-2">
+                        <label for="search" class="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                        <div class="relative">
+                            <input 
+                                type="text" 
+                                name="search" 
+                                id="search"
+                                placeholder="Search by ID, name, or LRN..." 
+                                value="<?php echo e($search); ?>"
+                                class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                            >
+                            <svg class="w-5 h-5 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                            </svg>
+                        </div>
                     </div>
-                    <button type="submit" class="px-6 py-2.5 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700 transition-colors">
-                        Search
-                    </button>
-                    <?php if ($search): ?>
-                        <a href="<?php echo config('app_url'); ?>/pages/students.php" class="px-6 py-2.5 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors">
+                    
+                    <!-- School Year Filter -->
+                    <div>
+                        <label for="school_year" class="block text-sm font-medium text-gray-700 mb-1">School Year</label>
+                        <select name="school_year" id="school_year" 
+                                class="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+                            <option value="">All School Years</option>
+                            <?php foreach ($allSchoolYears as $sy): ?>
+                                <option value="<?php echo $sy['id']; ?>" <?php echo $selectedSchoolYearId == $sy['id'] ? 'selected' : ''; ?>>
+                                    <?php echo e($sy['name']); ?><?php echo $sy['is_active'] ? ' (Active)' : ''; ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    
+                    <!-- Class Filter -->
+                    <div>
+                        <label for="class_id" class="block text-sm font-medium text-gray-700 mb-1">Class</label>
+                        <select name="class_id" id="class_id" 
+                                class="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+                            <option value="">All Classes</option>
+                            <?php foreach ($availableClasses as $class): ?>
+                                <option value="<?php echo $class['id']; ?>" <?php echo $selectedClassId == $class['id'] ? 'selected' : ''; ?>>
+                                    <?php echo e($class['grade_level'] . ' - ' . $class['section']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    
+                    <!-- Buttons -->
+                    <div class="flex items-end gap-2">
+                        <button type="submit" class="flex-1 px-4 py-2.5 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700 transition-colors">
+                            Filter
+                        </button>
+                        <a href="<?php echo config('app_url'); ?>/pages/students.php" class="px-4 py-2.5 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors">
                             Clear
                         </a>
-                    <?php endif; ?>
+                    </div>
                 </form>
             </div>
             
@@ -112,6 +243,7 @@ $pageTitle = 'Students';
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student ID</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
+                                <th class="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teacher</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parent Contact</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -131,9 +263,25 @@ $pageTitle = 'Students';
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($students as $student): ?>
+                                    <?php 
+                                    // Get class display info - use new class system if available
+                                    $classDisplay = '';
+                                    $teacherDisplay = '';
+                                    if (isset($student['grade_level']) && $student['grade_level']) {
+                                        $classDisplay = $student['grade_level'] . ' - ' . ($student['class_section'] ?? '');
+                                        $teacherDisplay = $student['teacher_name'] ?? '';
+                                    } else {
+                                        $classDisplay = $student['class'] . ($student['section'] ? ' - ' . $student['section'] : '');
+                                    }
+                                    ?>
                                     <tr class="hover:bg-gray-50/50 transition-colors">
                                         <td class="px-6 py-4 whitespace-nowrap">
-                                            <span class="text-sm font-medium text-gray-900"><?php echo e($student['student_id']); ?></span>
+                                            <div>
+                                                <span class="text-sm font-medium text-gray-900"><?php echo e($student['student_id'] ?? $student['student_code'] ?? ''); ?></span>
+                                                <?php if (!empty($student['lrn'])): ?>
+                                                    <div class="text-xs text-gray-500">LRN: <?php echo e($student['lrn']); ?></div>
+                                                <?php endif; ?>
+                                            </div>
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap">
                                             <div class="flex items-center">
@@ -146,13 +294,16 @@ $pageTitle = 'Students';
                                             </div>
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap">
-                                            <span class="text-sm text-gray-600"><?php echo e($student['class'] . ($student['section'] ? ' - ' . $student['section'] : '')); ?></span>
+                                            <span class="text-sm text-gray-600"><?php echo e($classDisplay); ?></span>
+                                        </td>
+                                        <td class="hidden lg:table-cell px-6 py-4 whitespace-nowrap">
+                                            <span class="text-sm text-gray-600"><?php echo $teacherDisplay ? e($teacherDisplay) : '<span class="text-gray-400">—</span>'; ?></span>
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap">
-                                            <?php if ($student['parent_phone']): ?>
+                                            <?php if (!empty($student['parent_phone'])): ?>
                                                 <div class="text-sm text-gray-600"><?php echo e($student['parent_phone']); ?></div>
                                             <?php endif; ?>
-                                            <?php if ($student['parent_email']): ?>
+                                            <?php if (!empty($student['parent_email'])): ?>
                                                 <div class="text-xs text-gray-500"><?php echo e($student['parent_email']); ?></div>
                                             <?php endif; ?>
                                         </td>
@@ -169,7 +320,7 @@ $pageTitle = 'Students';
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             <a href="<?php echo config('app_url'); ?>/pages/student-view.php?id=<?php echo $student['id']; ?>" class="text-violet-600 hover:text-violet-700 mr-3">View</a>
-                                            <?php if (hasAnyRole(['admin', 'operator'])): ?>
+                                            <?php if (hasAnyRole(['admin', 'operator', 'teacher'])): ?>
                                                 <a href="<?php echo config('app_url'); ?>/pages/student-edit.php?id=<?php echo $student['id']; ?>" class="text-gray-600 hover:text-gray-700">Edit</a>
                                             <?php endif; ?>
                                         </td>
@@ -186,9 +337,17 @@ $pageTitle = 'Students';
                         Showing <?php echo $offset + 1; ?> to <?php echo min($offset + $perPage, $totalStudents); ?> of <?php echo $totalStudents; ?> students
                     </div>
                     <?php if ($totalPages > 1): ?>
+                        <?php
+                        // Build query string for pagination links
+                        $queryParams = [];
+                        if ($search) $queryParams['search'] = $search;
+                        if ($selectedSchoolYearId) $queryParams['school_year'] = $selectedSchoolYearId;
+                        if ($selectedClassId) $queryParams['class_id'] = $selectedClassId;
+                        $queryString = http_build_query($queryParams);
+                        ?>
                         <div class="flex gap-2">
-                            <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-                                <a href="?page=<?php echo $i; ?><?php echo $search ? '&search=' . urlencode($search) : ''; ?>" 
+                            <?php for ($i = 1; $i <= min($totalPages, 10); $i++): ?>
+                                <a href="?page=<?php echo $i; ?><?php echo $queryString ? '&' . $queryString : ''; ?>" 
                                    class="px-3 py-1 rounded-lg text-sm <?php echo $i === $page ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'; ?>">
                                     <?php echo $i; ?>
                                 </a>

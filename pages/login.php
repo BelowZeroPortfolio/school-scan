@@ -12,7 +12,7 @@ require_once __DIR__ . '/../includes/functions.php';
 
 // Redirect if already logged in
 if (isLoggedIn()) {
-    redirect(config('app_url') . '/pages/dashboard.php');
+    redirectToDashboard();
 }
 
 $error = null;
@@ -58,8 +58,8 @@ if (isPost()) {
         } else {
             // Attempt login
             if (login($username, $password)) {
-                // Redirect to dashboard on success
-                redirect(config('app_url') . '/pages/dashboard.php');
+                // Redirect to appropriate dashboard based on role
+                redirectToDashboard();
             } else {
                 $error = 'Invalid username or password.';
             }

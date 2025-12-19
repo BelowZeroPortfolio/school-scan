@@ -18,18 +18,23 @@ if (session_status() === PHP_SESSION_NONE) {
 
 $scanResult = null;
 
+// Get scan mode from URL parameter (arrival or dismissal)
+$scanMode = isset($_GET['mode']) && $_GET['mode'] === 'dismissal' ? 'dismissal' : 'arrival';
+
 // Handle barcode scan submission with POST-Redirect-GET pattern
 if (isPost()) {
     verifyCsrf();
     
     $barcode = sanitizeString($_POST['barcode'] ?? '');
+    $mode = sanitizeString($_POST['mode'] ?? 'arrival');
     
     // Only process if barcode is not empty
     if (!empty($barcode)) {
-        $result = processBarcodeScan($barcode);
+        $result = processBarcodeScan($barcode, $mode);
         
         // Store result in session and redirect to prevent resubmission
         $_SESSION['scan_result'] = $result;
+        $_SESSION['scan_mode'] = $mode;
         header('Location: ' . $_SERVER['REQUEST_URI']);
         exit;
     }
@@ -40,6 +45,27 @@ if (isset($_SESSION['scan_result'])) {
     $scanResult = $_SESSION['scan_result'];
     unset($_SESSION['scan_result']); // Clear after reading
 }
+if (isset($_SESSION['scan_mode'])) {
+    $scanMode = $_SESSION['scan_mode'];
+    unset($_SESSION['scan_mode']);
+}
+
+// Mode display settings
+$modeConfig = [
+    'arrival' => [
+        'title' => 'Arrival: Time In',
+        'subtitle' => 'Record student arrival',
+        'color' => 'green',
+        'icon' => 'M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1'
+    ],
+    'dismissal' => [
+        'title' => 'Dismissal: Time Out',
+        'subtitle' => 'Record student dismissal',
+        'color' => 'orange',
+        'icon' => 'M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1'
+    ]
+];
+$currentMode = $modeConfig[$scanMode];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -94,14 +120,14 @@ if (isset($_SESSION['scan_result'])) {
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                 <div class="flex items-center justify-between">
                     <a href="<?php echo config('app_url'); ?>/" class="flex items-center gap-3">
-                        <div class="w-10 h-10 bg-gradient-to-br from-violet-600 to-violet-700 rounded-xl flex items-center justify-center shadow-sm">
-                            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0zM6 18a1 1 0 001-1v-2.065a8.935 8.935 0 00-2-.712V17a1 1 0 001 1z"/>
+                        <div class="w-10 h-10 bg-gradient-to-br from-<?php echo $currentMode['color']; ?>-500 to-<?php echo $currentMode['color']; ?>-600 rounded-xl flex items-center justify-center shadow-sm">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="<?php echo $currentMode['icon']; ?>"/>
                             </svg>
                         </div>
                         <div>
-                            <h1 class="text-xl font-bold theme-text-primary">Student Check-In</h1>
-                            <p class="text-xs theme-text-muted">Scan your barcode</p>
+                            <h1 class="text-xl font-bold theme-text-primary"><?php echo e($currentMode['title']); ?></h1>
+                            <p class="text-xs theme-text-muted"><?php echo e($currentMode['subtitle']); ?></p>
                         </div>
                     </a>
                     <div class="flex items-center gap-3">
@@ -144,6 +170,7 @@ if (isset($_SESSION['scan_result'])) {
                                         <?php if (!empty($scanResult['student']['class'])): ?>
                                             | <?php echo e($scanResult['student']['class']); ?><?php echo !empty($scanResult['student']['section']) ? '-' . e($scanResult['student']['section']) : ''; ?>
                                         <?php endif; ?>
+                                        | <span class="font-semibold"><?php echo isset($scanResult['mode']) && $scanResult['mode'] === 'dismissal' ? 'Time Out' : 'Time In'; ?></span>
                                     </p>
                                     <?php if (isset($scanResult['notification']['sms'])): ?>
                                     <div class="mt-2 flex flex-wrap gap-2 text-xs">
@@ -243,27 +270,35 @@ if (isset($_SESSION['scan_result'])) {
                         
                         <form method="POST" action="" id="scanForm" x-data="{ scanning: false }">
                             <?php echo csrfField(); ?>
+                            <input type="hidden" name="mode" value="<?php echo e($scanMode); ?>">
                             
                             <div class="mb-6">
                                 <label for="barcode" class="block text-sm font-medium theme-text-secondary mb-3">
-                                    Scan Your Student ID (LRN)
+                                    Scan or Enter Student ID (LRN)
                                 </label>
                                 
-                                <!-- Ready indicator -->
-                                <div class="mb-3 flex items-center gap-2 text-sm">
-                                    <span class="relative flex h-3 w-3">
-                                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                                        <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                                    </span>
-                                    <span class="text-green-600 font-medium">Ready to scan</span>
+                                <!-- Mode indicator -->
+                                <div class="mb-3 flex items-center justify-between">
+                                    <div class="flex items-center gap-2 text-sm">
+                                        <span class="relative flex h-3 w-3">
+                                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-<?php echo $currentMode['color']; ?>-400 opacity-75"></span>
+                                            <span class="relative inline-flex rounded-full h-3 w-3 bg-<?php echo $currentMode['color']; ?>-500"></span>
+                                        </span>
+                                        <span class="text-<?php echo $currentMode['color']; ?>-600 font-medium">Ready - <?php echo $scanMode === 'arrival' ? 'Time In' : 'Time Out'; ?></span>
+                                    </div>
+                                    <!-- Switch mode link -->
+                                    <a href="?mode=<?php echo $scanMode === 'arrival' ? 'dismissal' : 'arrival'; ?>" 
+                                       class="text-xs text-<?php echo $scanMode === 'arrival' ? 'orange' : 'green'; ?>-500 hover:underline">
+                                        Switch to <?php echo $scanMode === 'arrival' ? 'Dismissal' : 'Arrival'; ?>
+                                    </a>
                                 </div>
                                 
                                 <input 
                                     type="text" 
                                     id="barcode" 
                                     name="barcode" 
-                                    class="w-full px-4 py-5 bg-gray-900/50 dark-mode:bg-gray-900/50 light-only:bg-gray-50 border-2 border-violet-500/50 rounded-xl focus:ring-4 focus:ring-violet-500/30 focus:border-violet-500 text-xl font-mono theme-text-primary placeholder-gray-500 text-center transition-all"
-                                    placeholder="Scan barcode here..."
+                                    class="w-full px-4 py-5 bg-gray-900/50 dark-mode:bg-gray-900/50 light-only:bg-gray-50 border-2 border-<?php echo $currentMode['color']; ?>-500/50 rounded-xl focus:ring-4 focus:ring-<?php echo $currentMode['color']; ?>-500/30 focus:border-<?php echo $currentMode['color']; ?>-500 text-xl font-mono theme-text-primary placeholder-gray-500 text-center transition-all"
+                                    placeholder="Scan or type LRN here..."
                                     autofocus
                                     autocomplete="off"
                                 >
@@ -271,7 +306,7 @@ if (isset($_SESSION['scan_result'])) {
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                                     </svg>
-                                    Auto-submits when barcode is detected
+                                    Scanner auto-submits • Manual entry: click Submit button
                                 </p>
                             </div>
                             
@@ -289,9 +324,9 @@ if (isset($_SESSION['scan_result'])) {
                             <button 
                                 type="submit" 
                                 id="submitBtn"
-                                class="w-full bg-gradient-to-r from-violet-600 to-violet-700 text-white px-6 py-4 rounded-xl hover:from-violet-700 hover:to-violet-800 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 font-semibold text-lg shadow-lg transition-all"
+                                class="w-full bg-gradient-to-r from-<?php echo $currentMode['color']; ?>-500 to-<?php echo $currentMode['color']; ?>-600 text-white px-6 py-4 rounded-xl hover:from-<?php echo $currentMode['color']; ?>-600 hover:to-<?php echo $currentMode['color']; ?>-700 focus:outline-none focus:ring-2 focus:ring-<?php echo $currentMode['color']; ?>-500 focus:ring-offset-2 font-semibold text-lg shadow-lg transition-all"
                             >
-                                Submit Attendance
+                                <?php echo $scanMode === 'arrival' ? 'Record Arrival' : 'Record Dismissal'; ?>
                             </button>
                         </form>
                     </div>
@@ -402,8 +437,11 @@ if (isset($_SESSION['scan_result'])) {
             
             let html5QrCode = null;
             let lastInputTime = 0;
+            let inputBuffer = [];
             let submitTimeout = null;
             const MIN_BARCODE_LENGTH = 6;
+            const SCANNER_SPEED_THRESHOLD = 50; // ms between characters for scanner detection
+            const SCANNER_SUBMIT_DELAY = 100; // ms to wait after fast input before submitting
             
             // Focus input on page load
             barcodeInput.focus();
@@ -423,26 +461,39 @@ if (isset($_SESSION['scan_result'])) {
             }, 3000);
             <?php endif; ?>
             
-            // Hardware scanner detection
+            // Hardware scanner detection - only auto-submit for fast scanner input
+            // Manual typing will NOT auto-submit
             barcodeInput.addEventListener('input', function(e) {
                 const currentTime = Date.now();
+                const timeSinceLastInput = currentTime - lastInputTime;
                 const currentValue = e.target.value.trim();
                 
                 if (submitTimeout) clearTimeout(submitTimeout);
                 
+                // Track input speed to detect scanner vs manual typing
+                if (timeSinceLastInput < SCANNER_SPEED_THRESHOLD && lastInputTime > 0) {
+                    // Fast input detected - likely a barcode scanner
+                    inputBuffer.push(currentTime);
+                } else {
+                    // Slow input - manual typing, reset buffer
+                    inputBuffer = [currentTime];
+                }
+                
                 lastInputTime = currentTime;
                 
-                if (currentValue.length >= MIN_BARCODE_LENGTH) {
+                // Only auto-submit if we detected fast scanner input (multiple fast characters)
+                // This prevents auto-submit during manual typing
+                if (currentValue.length >= MIN_BARCODE_LENGTH && inputBuffer.length >= 4) {
                     submitTimeout = setTimeout(function() {
                         if (barcodeInput.value.trim().length >= MIN_BARCODE_LENGTH) {
                             showProcessing();
                             scanForm.submit();
                         }
-                    }, 300);
+                    }, SCANNER_SUBMIT_DELAY);
                 }
             });
             
-            // Enter key handler
+            // Enter key handler - for manual submission
             barcodeInput.addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
@@ -452,6 +503,12 @@ if (isset($_SESSION['scan_result'])) {
                         scanForm.submit();
                     }
                 }
+            });
+            
+            // Reset input buffer when field is cleared or focused
+            barcodeInput.addEventListener('focus', function() {
+                inputBuffer = [];
+                lastInputTime = 0;
             });
             
             // Form validation

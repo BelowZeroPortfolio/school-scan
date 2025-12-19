@@ -2,6 +2,8 @@
 /**
  * Reports Page
  * Generate and export attendance reports
+ * 
+ * Requirements: 7.3, 8.1, 8.3, 8.4, 9.3, 10.3 - Add school year filter, class/teacher filters, include school year in export
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -11,6 +13,8 @@ require_once __DIR__ . '/../includes/reports.php';
 require_once __DIR__ . '/../includes/export-csv.php';
 require_once __DIR__ . '/../includes/export-pdf.php';
 require_once __DIR__ . '/../includes/export-excel.php';
+require_once __DIR__ . '/../includes/schoolyear.php';
+require_once __DIR__ . '/../includes/classes.php';
 
 // Require authentication
 requireAuth();
@@ -18,29 +22,65 @@ requireAuth();
 // Check if user has permission to view reports
 // Viewers can see reports, but only for their assigned classes
 $currentUser = getCurrentUser();
+$userId = $currentUser['id'] ?? null;
 $isAdmin = hasRole('admin');
 $isOperator = hasRole('operator');
 
-// Handle export requests
+// Get active school year and all school years for filter (Requirements: 9.3)
+$activeSchoolYear = getActiveSchoolYear();
+$allSchoolYears = getAllSchoolYears();
+
+// Get available classes and teachers for filters (Requirements: 10.3)
+$availableClassesForFilter = [];
+$availableTeachers = [];
+if (isTeacher() && $userId) {
+    // Teachers see only their classes (Requirements: 8.1)
+    $availableClassesForFilter = getTeacherClasses($userId, $activeSchoolYear ? $activeSchoolYear['id'] : null);
+} else {
+    // Admin/Operator see all classes and teachers
+    $availableClassesForFilter = getClassesBySchoolYear($activeSchoolYear ? $activeSchoolYear['id'] : null);
+    $availableTeachers = getAllTeachers();
+}
+
+// Handle export requests (Requirements: 8.3 - include school year in filename)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'export') {
     verifyCsrf();
     
     $exportFormat = $_POST['export_format'] ?? 'csv';
     $reportType = $_POST['report_type'] ?? 'detailed';
     
-    // Build filters
+    // Build filters including school year (Requirements: 9.3)
     $filters = [
         'start_date' => $_POST['start_date'] ?? date('Y-m-d', strtotime('-30 days')),
         'end_date' => $_POST['end_date'] ?? date('Y-m-d'),
         'class' => $_POST['class'] ?? null,
         'section' => $_POST['section'] ?? null,
-        'status' => $_POST['status'] ?? null
+        'status' => $_POST['status'] ?? null,
+        'school_year_id' => isset($_POST['school_year']) && $_POST['school_year'] !== '' ? (int)$_POST['school_year'] : null,
+        'class_id' => isset($_POST['class_id']) && $_POST['class_id'] !== '' ? (int)$_POST['class_id'] : null,
+        'teacher_id' => isset($_POST['teacher_id']) && $_POST['teacher_id'] !== '' ? (int)$_POST['teacher_id'] : null
     ];
+    
+    // For teachers, force filter to their classes only (Requirements: 8.1)
+    if (isTeacher() && $userId) {
+        $filters['teacher_id'] = $userId;
+    }
     
     // Remove empty filters
     $filters = array_filter($filters, function($value) {
         return $value !== null && $value !== '';
     });
+    
+    // Get school year name for filename (Requirements: 8.3)
+    $schoolYearName = '';
+    if (isset($filters['school_year_id'])) {
+        $sy = getSchoolYearById($filters['school_year_id']);
+        if ($sy) {
+            $schoolYearName = '_' . str_replace('-', '_', $sy['name']);
+        }
+    } elseif ($activeSchoolYear) {
+        $schoolYearName = '_' . str_replace('-', '_', $activeSchoolYear['name']);
+    }
     
     try {
         if ($reportType === 'summary') {
@@ -52,19 +92,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             );
             
             $filepath = false;
-            $downloadName = 'student_summary_' . date('Y-m-d');
+            $downloadName = 'student_summary' . $schoolYearName . '_' . date('Y-m-d');
             
             switch ($exportFormat) {
                 case 'csv':
-                    $filepath = exportStudentSummaryCsv($data, 'student_summary');
+                    $filepath = exportStudentSummaryCsv($data, 'student_summary' . $schoolYearName);
                     $downloadName .= '.csv';
                     break;
                 case 'pdf':
-                    $filepath = exportStudentSummaryPdf($data, 'student_summary');
+                    $filepath = exportStudentSummaryPdf($data, 'student_summary' . $schoolYearName);
                     $downloadName .= '.pdf';
                     break;
                 case 'excel':
-                    $filepath = exportStudentSummaryExcel($data, 'student_summary');
+                    $filepath = exportStudentSummaryExcel($data, 'student_summary' . $schoolYearName);
                     $downloadName .= '.xlsx';
                     break;
             }
@@ -74,19 +114,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $stats = calculateReportStats($data, $filters);
             
             $filepath = false;
-            $downloadName = 'attendance_report_' . date('Y-m-d');
+            $downloadName = 'attendance_report' . $schoolYearName . '_' . date('Y-m-d');
             
             switch ($exportFormat) {
                 case 'csv':
-                    $filepath = exportToCsv($data, 'attendance_report');
+                    $filepath = exportToCsv($data, 'attendance_report' . $schoolYearName);
                     $downloadName .= '.csv';
                     break;
                 case 'pdf':
-                    $filepath = exportToPdf($data, $stats, 'attendance_report');
+                    $filepath = exportToPdf($data, $stats, 'attendance_report' . $schoolYearName);
                     $downloadName .= '.pdf';
                     break;
                 case 'excel':
-                    $filepath = exportToExcel($data, $stats, 'attendance_report');
+                    $filepath = exportToExcel($data, $stats, 'attendance_report' . $schoolYearName);
                     $downloadName .= '.xlsx';
                     break;
             }
@@ -113,12 +153,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 $availableClasses = getAvailableClasses();
 $availableSections = getAvailableSections();
 
-// Default filter values
+// Default filter values (Requirements: 9.3)
 $startDate = $_GET['start_date'] ?? date('Y-m-d', strtotime('-30 days'));
 $endDate = $_GET['end_date'] ?? date('Y-m-d');
 $selectedClass = $_GET['class'] ?? '';
 $selectedSection = $_GET['section'] ?? '';
 $selectedStatus = $_GET['status'] ?? '';
+
+// Teachers are locked to active school year only
+if (isTeacher()) {
+    $selectedSchoolYearId = $activeSchoolYear ? $activeSchoolYear['id'] : null;
+} else {
+    $selectedSchoolYearId = isset($_GET['school_year']) && $_GET['school_year'] !== '' ? (int)$_GET['school_year'] : ($activeSchoolYear ? $activeSchoolYear['id'] : null);
+}
+
+$selectedClassId = isset($_GET['class_id']) && $_GET['class_id'] !== '' ? (int)$_GET['class_id'] : null;
+$selectedTeacherId = isset($_GET['teacher_id']) && $_GET['teacher_id'] !== '' ? (int)$_GET['teacher_id'] : null;
+
+// For teachers, force filter to their classes only (Requirements: 8.1)
+$teacherIdFilter = null;
+if (isTeacher() && $userId) {
+    $teacherIdFilter = $userId;
+}
 
 // Generate preview data if filters are applied
 $previewData = [];
@@ -129,7 +185,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['preview'])) {
         'end_date' => $endDate,
         'class' => $selectedClass ?: null,
         'section' => $selectedSection ?: null,
-        'status' => $selectedStatus ?: null
+        'status' => $selectedStatus ?: null,
+        'school_year_id' => $selectedSchoolYearId,
+        'class_id' => $selectedClassId,
+        'teacher_id' => $teacherIdFilter ?: $selectedTeacherId
     ];
     
     $filters = array_filter($filters, function($value) {
@@ -164,12 +223,12 @@ $pageTitle = 'Attendance Reports';
                 </div>
             <?php endif; ?>
             
-            <!-- Filter Form -->
+            <!-- Filter Form (Requirements: 7.3, 9.3, 10.3) -->
             <div class="bg-white rounded-xl p-6 border border-gray-100 mb-6">
                 <h2 class="text-lg font-semibold text-gray-900 mb-4">Report Filters</h2>
                 
                 <form method="GET" action="" class="space-y-4">
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <!-- Date Range -->
                         <div>
                             <label for="start_date" class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
@@ -183,27 +242,65 @@ $pageTitle = 'Attendance Reports';
                                    class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors theme-bg-card theme-text-primary">
                         </div>
                         
-                        <!-- Class Filter -->
+                        <!-- School Year Filter (Requirements: 9.3) - Hidden for teachers -->
+                        <?php if (!isTeacher()): ?>
                         <div>
-                            <label for="class" class="block text-sm font-medium text-gray-700 mb-1">Class</label>
-                            <select id="class" name="class" class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors theme-bg-card theme-text-primary">
+                            <label for="school_year" class="block text-sm font-medium text-gray-700 mb-1">School Year</label>
+                            <select id="school_year" name="school_year" class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors theme-bg-card theme-text-primary">
+                                <option value="">All School Years</option>
+                                <?php foreach ($allSchoolYears as $sy): ?>
+                                    <option value="<?php echo $sy['id']; ?>" <?php echo $selectedSchoolYearId == $sy['id'] ? 'selected' : ''; ?>>
+                                        <?php echo e($sy['name']); ?><?php echo $sy['is_active'] ? ' (Active)' : ''; ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <?php else: ?>
+                        <!-- Teachers see current school year as read-only info -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">School Year</label>
+                            <div class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 text-gray-600">
+                                <?php echo $activeSchoolYear ? e($activeSchoolYear['name']) : 'No active school year'; ?>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                        
+                        <!-- Class Filter (New System) (Requirements: 7.3) -->
+                        <div>
+                            <label for="class_id" class="block text-sm font-medium text-gray-700 mb-1">Class</label>
+                            <select id="class_id" name="class_id" class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors theme-bg-card theme-text-primary">
                                 <option value="">All Classes</option>
-                                <?php foreach ($availableClasses as $class): ?>
-                                    <option value="<?php echo e($class); ?>" <?php echo $selectedClass === $class ? 'selected' : ''; ?>>
-                                        <?php echo e($class); ?>
+                                <?php foreach ($availableClassesForFilter as $class): ?>
+                                    <option value="<?php echo $class['id']; ?>" <?php echo $selectedClassId == $class['id'] ? 'selected' : ''; ?>>
+                                        <?php echo e($class['grade_level'] . ' - ' . $class['section']); ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
                         
-                        <!-- Section Filter -->
+                        <!-- Teacher Filter (Admin only) (Requirements: 10.3) -->
+                        <?php if (!isTeacher() && !empty($availableTeachers)): ?>
                         <div>
-                            <label for="section" class="block text-sm font-medium text-gray-700 mb-1">Section</label>
-                            <select id="section" name="section" class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors theme-bg-card theme-text-primary">
-                                <option value="">All Sections</option>
-                                <?php foreach ($availableSections as $section): ?>
-                                    <option value="<?php echo e($section); ?>" <?php echo $selectedSection === $section ? 'selected' : ''; ?>>
-                                        <?php echo e($section); ?>
+                            <label for="teacher_id" class="block text-sm font-medium text-gray-700 mb-1">Teacher</label>
+                            <select id="teacher_id" name="teacher_id" class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors theme-bg-card theme-text-primary">
+                                <option value="">All Teachers</option>
+                                <?php foreach ($availableTeachers as $teacher): ?>
+                                    <option value="<?php echo $teacher['id']; ?>" <?php echo $selectedTeacherId == $teacher['id'] ? 'selected' : ''; ?>>
+                                        <?php echo e($teacher['full_name']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <?php endif; ?>
+                        
+                        <!-- Legacy Class Filter -->
+                        <div>
+                            <label for="class" class="block text-sm font-medium text-gray-700 mb-1">Grade (Legacy)</label>
+                            <select id="class" name="class" class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors theme-bg-card theme-text-primary">
+                                <option value="">All Grades</option>
+                                <?php foreach ($availableClasses as $class): ?>
+                                    <option value="<?php echo e($class); ?>" <?php echo $selectedClass === $class ? 'selected' : ''; ?>>
+                                        <?php echo e($class); ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -220,6 +317,17 @@ $pageTitle = 'Attendance Reports';
                             </select>
                         </div>
                     </div>
+                    
+                    <?php if (isTeacher()): ?>
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <p class="text-sm text-blue-700">
+                            <svg class="inline-block w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            Reports are filtered to show only students in your classes.
+                        </p>
+                    </div>
+                    <?php endif; ?>
                     
                     <div class="flex gap-3">
                         <button type="submit" name="preview" value="1" 
@@ -270,6 +378,9 @@ $pageTitle = 'Attendance Reports';
                         <input type="hidden" name="class" value="<?php echo e($selectedClass); ?>">
                         <input type="hidden" name="section" value="<?php echo e($selectedSection); ?>">
                         <input type="hidden" name="status" value="<?php echo e($selectedStatus); ?>">
+                        <input type="hidden" name="school_year" value="<?php echo e($selectedSchoolYearId); ?>">
+                        <input type="hidden" name="class_id" value="<?php echo e($selectedClassId); ?>">
+                        <input type="hidden" name="teacher_id" value="<?php echo e($selectedTeacherId); ?>">
                         
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>

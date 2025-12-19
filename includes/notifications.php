@@ -190,3 +190,84 @@ function sendAttendanceNotification($student, $status = 'present') {
     $result = sendAttendanceNotificationWithStatus($student, $status);
     return $result['sms']['success'];
 }
+
+/**
+ * Format dismissal notification message
+ * 
+ * @param array $student Student data
+ * @param string $timestamp Timestamp
+ * @return string Formatted message
+ */
+function formatDismissalMessage($student, $timestamp = null) {
+    // Use Philippines timezone (UTC+8)
+    $tz = new DateTimeZone('Asia/Manila');
+    $now = new DateTime('now', $tz);
+    $formattedTime = $now->format('M d, Y h:i A');
+    
+    $studentName = $student['first_name'] . ' ' . $student['last_name'];
+    $schoolName = config('school_name', 'School');
+    
+    $message = sprintf(
+        "Hello %s, your child %s has been dismissed from school on %s. - %s",
+        $student['parent_name'] ?? 'Parent/Guardian',
+        $studentName,
+        $formattedTime,
+        $schoolName
+    );
+    
+    return $message;
+}
+
+/**
+ * Send dismissal notification with detailed status
+ * 
+ * @param array $student Student data
+ * @return array Detailed notification result
+ */
+function sendDismissalNotificationWithStatus($student) {
+    $result = [
+        'sms' => ['attempted' => false, 'success' => false, 'error' => null, 'recipient' => null]
+    ];
+    
+    $message = formatDismissalMessage($student);
+    
+    if (empty($student['parent_phone'])) {
+        $result['sms']['error'] = 'No parent phone number configured';
+        return $result;
+    }
+    
+    $result['sms']['recipient'] = $student['parent_phone'];
+    
+    if (!validatePhone($student['parent_phone'])) {
+        $result['sms']['error'] = 'Invalid phone number format';
+        return $result;
+    }
+    
+    $result['sms']['attempted'] = true;
+    $smsResult = sendSmsNotification($student['parent_phone'], $message);
+    $result['sms']['success'] = $smsResult['success'];
+    $result['sms']['error'] = $smsResult['error'];
+    $result['sms']['response'] = $smsResult['response'] ?? null;
+    
+    // Log to database
+    logNotification(
+        $student['id'],
+        $student['parent_phone'],
+        $message,
+        $smsResult['success'],
+        $smsResult['error']
+    );
+    
+    return $result;
+}
+
+/**
+ * Send dismissal notification (simple version)
+ * 
+ * @param array $student Student data
+ * @return bool True if notification sent
+ */
+function sendDismissalNotification($student) {
+    $result = sendDismissalNotificationWithStatus($student);
+    return $result['sms']['success'];
+}

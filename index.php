@@ -86,20 +86,20 @@ if (isLoggedIn()) {
 
                 <!-- Action Cards -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-                    <!-- Student Scan Card -->
-                    <a href="<?php echo config('app_url'); ?>/scan.php" class="group">
-                        <div class="theme-bg-card backdrop-blur-sm rounded-2xl p-8 shadow-2xl theme-border border hover:shadow-violet-500/20 hover:border-violet-500/50 transition-all duration-300 transform hover:-translate-y-1">
-                            <div class="w-16 h-16 bg-gradient-to-br from-violet-500 to-violet-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                    <!-- Arrival: Time In Card -->
+                    <a href="<?php echo config('app_url'); ?>/scan.php?mode=arrival" class="group">
+                        <div class="theme-bg-card backdrop-blur-sm rounded-2xl p-8 shadow-2xl theme-border border hover:shadow-green-500/20 hover:border-green-500/50 transition-all duration-300 transform hover:-translate-y-1">
+                            <div class="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                                 <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
                                 </svg>
                             </div>
-                            <h3 class="text-2xl font-bold theme-text-primary mb-3">Student Check-In</h3>
+                            <h3 class="text-2xl font-bold theme-text-primary mb-3">Arrival: Time In</h3>
                             <p class="theme-text-secondary mb-4">
-                                Scan your student ID barcode to record your attendance
+                                Scan student ID barcode to record arrival time
                             </p>
-                            <div class="flex items-center text-violet-400 font-semibold group-hover:gap-2 transition-all">
-                                <span>Scan Now</span>
+                            <div class="flex items-center text-green-400 font-semibold group-hover:gap-2 transition-all">
+                                <span>Scan Arrival</span>
                                 <svg class="w-5 h-5 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
                                 </svg>
@@ -107,25 +107,35 @@ if (isLoggedIn()) {
                         </div>
                     </a>
 
-                    <!-- Admin Portal Card -->
-                    <a href="<?php echo config('app_url'); ?>/pages/login.php" class="group">
-                        <div class="theme-bg-card backdrop-blur-sm rounded-2xl p-8 shadow-2xl theme-border border hover:shadow-blue-500/20 hover:border-blue-500/50 transition-all duration-300 transform hover:-translate-y-1">
-                            <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                    <!-- Dismissal: Time Out Card -->
+                    <a href="<?php echo config('app_url'); ?>/scan.php?mode=dismissal" class="group">
+                        <div class="theme-bg-card backdrop-blur-sm rounded-2xl p-8 shadow-2xl theme-border border hover:shadow-orange-500/20 hover:border-orange-500/50 transition-all duration-300 transform hover:-translate-y-1">
+                            <div class="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                                 <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
                                 </svg>
                             </div>
-                            <h3 class="text-2xl font-bold theme-text-primary mb-3">Admin Portal</h3>
+                            <h3 class="text-2xl font-bold theme-text-primary mb-3">Dismissal: Time Out</h3>
                             <p class="theme-text-secondary mb-4">
-                                Manage students, view reports, and track attendance records
+                                Scan student ID barcode to record dismissal time
                             </p>
-                            <div class="flex items-center text-blue-400 font-semibold group-hover:gap-2 transition-all">
-                                <span>Login</span>
+                            <div class="flex items-center text-orange-400 font-semibold group-hover:gap-2 transition-all">
+                                <span>Scan Dismissal</span>
                                 <svg class="w-5 h-5 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
                                 </svg>
                             </div>
                         </div>
+                    </a>
+                </div>
+
+                <!-- Admin Login Link -->
+                <div class="text-center mt-8">
+                    <a href="<?php echo config('app_url'); ?>/pages/login.php" class="inline-flex items-center gap-2 text-sm font-medium theme-text-secondary hover:text-violet-400 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                        Admin Portal Login
                     </a>
                 </div>
 

@@ -2,15 +2,23 @@
 /**
  * View Student Page
  * Display student details with barcode
+ * 
+ * Requirements: 4.4, 6.3, 9.4 - Show enrollment history, current class/teacher, filter attendance by school year
  */
 
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/schoolyear.php';
+require_once __DIR__ . '/../includes/classes.php';
 
 // Require authentication
 requireAuth();
+
+// Get current user info
+$currentUser = getCurrentUser();
+$userId = $currentUser['id'] ?? null;
 
 // Get student ID from query string
 $studentId = (int)($_GET['id'] ?? 0);
@@ -28,6 +36,24 @@ if (!$student) {
     setFlash('error', 'Student not found.');
     redirect(config('app_url') . '/pages/students.php');
 }
+
+// Check teacher access (Requirements: 6.3, 6.4)
+if (isTeacher() && $userId) {
+    if (!canTeacherAccessStudent($userId, $studentId)) {
+        setFlash('error', 'You do not have permission to access this student.');
+        redirect(config('app_url') . '/pages/students.php');
+    }
+}
+
+// Get active school year
+$activeSchoolYear = getActiveSchoolYear();
+$schoolYearId = $activeSchoolYear ? $activeSchoolYear['id'] : null;
+
+// Get current class for the student (Requirements: 6.3)
+$currentClass = getStudentClass($studentId, $schoolYearId);
+
+// Get enrollment history across all school years (Requirements: 4.4, 9.4)
+$enrollmentHistory = getStudentEnrollmentHistory($studentId);
 
 $pageTitle = 'View Student';
 $currentUser = getCurrentUser();
@@ -101,9 +127,22 @@ $currentUser = getCurrentUser();
                             <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2"><?php echo $student['date_of_birth'] ? formatDate($student['date_of_birth']) : 'Not provided'; ?></dd>
                         </div>
                         <div class="px-6 py-4 sm:grid sm:grid-cols-3 sm:gap-4">
-                            <dt class="text-sm font-medium text-gray-500">Class</dt>
-                            <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2"><?php echo e($student['class'] . ($student['section'] ? ' - Section ' . $student['section'] : '')); ?></dd>
+                            <dt class="text-sm font-medium text-gray-500">Current Class</dt>
+                            <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                                <?php if ($currentClass): ?>
+                                    <span class="font-medium"><?php echo e($currentClass['grade_level'] . ' - ' . $currentClass['section']); ?></span>
+                                    <span class="text-gray-500 ml-2">(<?php echo e($currentClass['school_year_name']); ?>)</span>
+                                <?php else: ?>
+                                    <span class="text-amber-600">Not enrolled in any class</span>
+                                <?php endif; ?>
+                            </dd>
                         </div>
+                        <?php if ($currentClass): ?>
+                        <div class="px-6 py-4 sm:grid sm:grid-cols-3 sm:gap-4 bg-gray-50/30">
+                            <dt class="text-sm font-medium text-gray-500">Teacher</dt>
+                            <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2"><?php echo e($currentClass['teacher_name']); ?></dd>
+                        </div>
+                        <?php endif; ?>
                         <div class="px-6 py-4 sm:grid sm:grid-cols-3 sm:gap-4 bg-gray-50/30">
                             <dt class="text-sm font-medium text-gray-500">Status</dt>
                             <dd class="mt-1 sm:mt-0 sm:col-span-2">
@@ -145,6 +184,57 @@ $currentUser = getCurrentUser();
                         </div>
                     </div>
                 </div>
+                
+                <!-- Enrollment History Card (Requirements: 4.4, 9.4) -->
+                <?php if (!empty($enrollmentHistory)): ?>
+                <div class="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                    <div class="px-6 py-4 bg-gray-50/50 border-b border-gray-100">
+                        <h3 class="text-lg font-semibold text-gray-900">Enrollment History</h3>
+                        <p class="text-sm text-gray-500 mt-1">Class assignments across school years</p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-100">
+                            <thead class="bg-gray-50/50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">School Year</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teacher</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Enrolled</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-100">
+                                <?php foreach ($enrollmentHistory as $enrollment): ?>
+                                    <tr class="hover:bg-gray-50/50 transition-colors <?php echo $enrollment['is_current_year'] ? 'bg-violet-50/30' : ''; ?>">
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="text-sm font-medium text-gray-900"><?php echo e($enrollment['school_year_name']); ?></span>
+                                            <?php if ($enrollment['is_current_year']): ?>
+                                                <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-violet-100 text-violet-700">Current</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="text-sm text-gray-900"><?php echo e($enrollment['grade_level'] . ' - ' . $enrollment['section']); ?></span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="text-sm text-gray-600"><?php echo e($enrollment['teacher_name']); ?></span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="text-sm text-gray-500"><?php echo formatDate($enrollment['enrolled_at']); ?></span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <?php if ($enrollment['enrollment_active']): ?>
+                                                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">Active</span>
+                                            <?php else: ?>
+                                                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200">Inactive</span>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <?php endif; ?>
             </div>
             
             <!-- Sidebar Cards -->

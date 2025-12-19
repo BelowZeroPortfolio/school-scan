@@ -2,74 +2,175 @@
 /**
  * Generate ID Cards Page
  * Bulk generation of student ID cards with filtering
+ * Teachers can only see students from their classes
  */
 
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/classes.php';
+require_once __DIR__ . '/../includes/schoolyear.php';
 
-// Require authentication and admin/operator role
-requireAnyRole(['admin', 'operator']);
+// Require authentication and admin/operator/teacher role
+requireAnyRole(['admin', 'operator', 'teacher']);
+
+$currentUser = getCurrentUser();
+$isTeacher = isTeacher();
+$activeSchoolYear = getActiveSchoolYear();
 
 // Get filter parameters
 $grade = sanitizeString($_GET['grade'] ?? '');
 $section = sanitizeString($_GET['section'] ?? '');
 $search = sanitizeString($_GET['search'] ?? '');
+$classId = isset($_GET['class_id']) ? (int)$_GET['class_id'] : 0;
 
-// Get unique grades for filters
-$gradesSql = "SELECT DISTINCT class FROM students WHERE is_active = 1 ORDER BY class";
-$grades = dbFetchAll($gradesSql);
+// For teachers, get their classes and students
+$teacherClasses = [];
+$teacherStudentIds = [];
 
-// Get sections for selected grade (or all if no grade selected)
-if ($grade) {
-    $sectionsSql = "SELECT DISTINCT section FROM students WHERE is_active = 1 AND class = ? AND section IS NOT NULL AND section != '' ORDER BY section";
-    $sections = dbFetchAll($sectionsSql, [$grade]);
-} else {
-    $sectionsSql = "SELECT DISTINCT section FROM students WHERE is_active = 1 AND section IS NOT NULL AND section != '' ORDER BY section";
-    $sections = dbFetchAll($sectionsSql);
+if ($isTeacher && $activeSchoolYear) {
+    $teacherClasses = getTeacherClasses($currentUser['id'], $activeSchoolYear['id']);
+    
+    // Get all student IDs from teacher's classes
+    foreach ($teacherClasses as $tc) {
+        $classStudents = getClassStudents($tc['id']);
+        foreach ($classStudents as $cs) {
+            $teacherStudentIds[] = $cs['id'];
+        }
+    }
 }
 
-// Build grade-to-sections mapping for JavaScript
-$gradeSectionsMap = [];
-foreach ($grades as $g) {
-    $sectionsForGrade = dbFetchAll(
-        "SELECT DISTINCT section FROM students WHERE is_active = 1 AND class = ? AND section IS NOT NULL AND section != '' ORDER BY section",
-        [$g['class']]
-    );
-    $gradeSectionsMap[$g['class']] = array_column($sectionsForGrade, 'section');
+// Get unique grades for filters (teacher sees only their classes)
+if ($isTeacher) {
+    $grades = [];
+    $gradeSectionsMap = [];
+    foreach ($teacherClasses as $tc) {
+        $gradeKey = $tc['grade_level'];
+        if (!isset($gradeSectionsMap[$gradeKey])) {
+            $grades[] = ['class' => $gradeKey];
+            $gradeSectionsMap[$gradeKey] = [];
+        }
+        $gradeSectionsMap[$gradeKey][] = $tc['section'];
+    }
+    
+    // Get sections for selected grade
+    if ($grade && isset($gradeSectionsMap[$grade])) {
+        $sections = array_map(function($s) { return ['section' => $s]; }, $gradeSectionsMap[$grade]);
+    } else {
+        $allSections = [];
+        foreach ($gradeSectionsMap as $secs) {
+            $allSections = array_merge($allSections, $secs);
+        }
+        $sections = array_map(function($s) { return ['section' => $s]; }, array_unique($allSections));
+    }
+} else {
+    // Admin/Operator - show all grades/sections from classes table
+    $gradesSql = "SELECT DISTINCT c.grade_level AS class 
+                  FROM classes c 
+                  JOIN school_years sy ON c.school_year_id = sy.id AND sy.is_active = 1
+                  WHERE c.is_active = 1 
+                  ORDER BY c.grade_level";
+    $grades = dbFetchAll($gradesSql);
+    
+    if ($grade) {
+        $sectionsSql = "SELECT DISTINCT c.section 
+                        FROM classes c 
+                        JOIN school_years sy ON c.school_year_id = sy.id AND sy.is_active = 1
+                        WHERE c.is_active = 1 AND c.grade_level = ? 
+                        ORDER BY c.section";
+        $sections = dbFetchAll($sectionsSql, [$grade]);
+    } else {
+        $sectionsSql = "SELECT DISTINCT c.section 
+                        FROM classes c 
+                        JOIN school_years sy ON c.school_year_id = sy.id AND sy.is_active = 1
+                        WHERE c.is_active = 1 
+                        ORDER BY c.section";
+        $sections = dbFetchAll($sectionsSql);
+    }
+    
+    // Build grade-to-sections mapping for JavaScript
+    $gradeSectionsMap = [];
+    foreach ($grades as $g) {
+        $sectionsForGrade = dbFetchAll(
+            "SELECT DISTINCT c.section 
+             FROM classes c 
+             JOIN school_years sy ON c.school_year_id = sy.id AND sy.is_active = 1
+             WHERE c.is_active = 1 AND c.grade_level = ? 
+             ORDER BY c.section",
+            [$g['class']]
+        );
+        $gradeSectionsMap[$g['class']] = array_column($sectionsForGrade, 'section');
+    }
 }
 
 // Build query based on filters
 $students = [];
-$whereConditions = ['is_active = 1'];
-$params = [];
 
-if ($grade || $section || $search) {
-    if ($grade) {
-        $whereConditions[] = "class = ?";
-        $params[] = $grade;
+if ($isTeacher) {
+    // Teacher: only show students from their classes
+    if (!empty($teacherStudentIds) && ($classId || $search)) {
+        $whereConditions = ['s.is_active = 1', 's.id IN (' . implode(',', array_map('intval', $teacherStudentIds)) . ')'];
+        $params = [];
+        
+        if ($classId) {
+            // Filter by specific class
+            $whereConditions[] = "sc.class_id = ?";
+            $params[] = $classId;
+        }
+        
+        if ($search) {
+            $whereConditions[] = "(s.student_id LIKE ? OR s.first_name LIKE ? OR s.last_name LIKE ? OR s.lrn LIKE ?)";
+            $searchParam = '%' . $search . '%';
+            $params = array_merge($params, [$searchParam, $searchParam, $searchParam, $searchParam]);
+        }
+        
+        $sql = "SELECT DISTINCT s.id, s.student_id, s.lrn, s.first_name, s.last_name, 
+                       c.grade_level AS class, c.section, s.barcode_path, 
+                       s.parent_name, s.parent_phone, s.parent_email, s.address
+                FROM students s
+                JOIN student_classes sc ON s.id = sc.student_id
+                JOIN classes c ON sc.class_id = c.id
+                WHERE " . implode(' AND ', $whereConditions) . " AND sc.is_active = 1
+                ORDER BY c.grade_level, c.section, s.last_name, s.first_name";
+        
+        $students = dbFetchAll($sql, $params);
     }
-    if ($section) {
-        $whereConditions[] = "section = ?";
-        $params[] = $section;
+} else {
+    // Admin/Operator: show all students with filters (using classes table)
+    if ($grade || $section || $search) {
+        $whereConditions = ['s.is_active = 1', 'sc.is_active = 1', 'c.is_active = 1'];
+        $params = [];
+        
+        if ($grade) {
+            $whereConditions[] = "c.grade_level = ?";
+            $params[] = $grade;
+        }
+        if ($section) {
+            $whereConditions[] = "c.section = ?";
+            $params[] = $section;
+        }
+        if ($search) {
+            $whereConditions[] = "(s.student_id LIKE ? OR s.first_name LIKE ? OR s.last_name LIKE ? OR s.lrn LIKE ?)";
+            $searchParam = '%' . $search . '%';
+            $params = array_merge($params, [$searchParam, $searchParam, $searchParam, $searchParam]);
+        }
+        
+        $sql = "SELECT DISTINCT s.id, s.student_id, s.lrn, s.first_name, s.last_name, 
+                       c.grade_level AS class, c.section, s.barcode_path, 
+                       s.parent_name, s.parent_phone, s.parent_email, s.address
+                FROM students s
+                JOIN student_classes sc ON s.id = sc.student_id
+                JOIN classes c ON sc.class_id = c.id
+                JOIN school_years sy ON c.school_year_id = sy.id AND sy.is_active = 1
+                WHERE " . implode(' AND ', $whereConditions) . "
+                ORDER BY c.grade_level, c.section, s.last_name, s.first_name";
+        
+        $students = dbFetchAll($sql, $params);
     }
-    if ($search) {
-        $whereConditions[] = "(student_id LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR lrn LIKE ?)";
-        $searchParam = '%' . $search . '%';
-        $params = array_merge($params, [$searchParam, $searchParam, $searchParam, $searchParam]);
-    }
-    
-    $sql = "SELECT id, student_id, lrn, first_name, last_name, class, section, barcode_path, parent_name, parent_phone, parent_email, address
-            FROM students 
-            WHERE " . implode(' AND ', $whereConditions) . "
-            ORDER BY class, section, last_name, first_name";
-    
-    $students = dbFetchAll($sql, $params);
 }
 
 $pageTitle = 'Generate ID Cards';
-$currentUser = getCurrentUser();
 ?>
 
 <?php require_once __DIR__ . '/../includes/header.php'; ?>
@@ -103,33 +204,50 @@ $currentUser = getCurrentUser();
         <div class="bg-white rounded-xl border border-gray-100 p-6 mb-6">
             <h3 class="text-sm font-semibold text-gray-700 mb-4">Filter Students</h3>
             <form id="filterForm" method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <!-- Grade Filter -->
-                <div>
-                    <label for="grade" class="block text-sm font-medium text-gray-600 mb-1">Grade Level</label>
-                    <select name="grade" id="grade" onchange="onGradeChange()"
-                        class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm">
-                        <option value="">All Grades</option>
-                        <?php foreach ($grades as $g): ?>
-                            <option value="<?php echo e($g['class']); ?>" <?php echo $grade === $g['class'] ? 'selected' : ''; ?>>
-                                <?php echo e($g['class']); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                
-                <!-- Section Filter -->
-                <div>
-                    <label for="section" class="block text-sm font-medium text-gray-600 mb-1">Section</label>
-                    <select name="section" id="section" onchange="debounceFilter()"
-                        class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm">
-                        <option value="">All Sections</option>
-                        <?php foreach ($sections as $s): ?>
-                            <option value="<?php echo e($s['section']); ?>" <?php echo $section === $s['section'] ? 'selected' : ''; ?>>
-                                <?php echo e($s['section']); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
+                <?php if ($isTeacher): ?>
+                    <!-- Teacher: Class Filter -->
+                    <div class="md:col-span-2">
+                        <label for="class_id" class="block text-sm font-medium text-gray-600 mb-1">Select Class</label>
+                        <select name="class_id" id="class_id" onchange="debounceFilter()"
+                            class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm">
+                            <option value="">Select a class...</option>
+                            <?php foreach ($teacherClasses as $tc): ?>
+                                <option value="<?php echo $tc['id']; ?>" <?php echo $classId == $tc['id'] ? 'selected' : ''; ?>>
+                                    <?php echo e($tc['grade_level'] . ' - ' . $tc['section']); ?>
+                                    (<?php echo $tc['student_count']; ?> students)
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                <?php else: ?>
+                    <!-- Admin/Operator: Grade Filter -->
+                    <div>
+                        <label for="grade" class="block text-sm font-medium text-gray-600 mb-1">Grade Level</label>
+                        <select name="grade" id="grade" onchange="onGradeChange()"
+                            class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm">
+                            <option value="">All Grades</option>
+                            <?php foreach ($grades as $g): ?>
+                                <option value="<?php echo e($g['class']); ?>" <?php echo $grade === $g['class'] ? 'selected' : ''; ?>>
+                                    <?php echo e($g['class']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    
+                    <!-- Section Filter -->
+                    <div>
+                        <label for="section" class="block text-sm font-medium text-gray-600 mb-1">Section</label>
+                        <select name="section" id="section" onchange="debounceFilter()"
+                            class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm">
+                            <option value="">All Sections</option>
+                            <?php foreach ($sections as $s): ?>
+                                <option value="<?php echo e($s['section']); ?>" <?php echo $section === $s['section'] ? 'selected' : ''; ?>>
+                                    <?php echo e($s['section']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                <?php endif; ?>
                 
                 <!-- Search -->
                 <div>
@@ -169,7 +287,15 @@ $currentUser = getCurrentUser();
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
                     </svg>
                     <h3 class="mt-4 text-lg font-medium text-gray-900">Select filters to view students</h3>
-                    <p class="mt-2 text-sm text-gray-500">Choose a grade level or section above to display students for ID card generation.</p>
+                    <?php if ($isTeacher): ?>
+                        <?php if (empty($teacherClasses)): ?>
+                            <p class="mt-2 text-sm text-gray-500">You don't have any classes assigned yet. Please contact an administrator.</p>
+                        <?php else: ?>
+                            <p class="mt-2 text-sm text-gray-500">Select one of your classes above to display students for ID card generation.</p>
+                        <?php endif; ?>
+                    <?php else: ?>
+                        <p class="mt-2 text-sm text-gray-500">Choose a grade level or section above to display students for ID card generation.</p>
+                    <?php endif; ?>
                 </div>
             <?php else: ?>
                 <!-- Table Header -->
@@ -389,8 +515,8 @@ $currentUser = getCurrentUser();
                 if (qrContainer) {
                     new QRCode(qrContainer, {
                         text: student.lrn || student.student_id,
-                        width: 80,
-                        height: 80,
+                        width: 100,
+                        height: 100,
                         colorDark: '#000000',
                         colorLight: '#ffffff',
                         correctLevel: QRCode.CorrectLevel.M
@@ -404,68 +530,97 @@ $currentUser = getCurrentUser();
     function createIDCardHTML(student, index) {
         const name = (student.first_name + ' ' + student.last_name).toUpperCase();
         const lrn = student.lrn || student.student_id;
+        const gradeSection = student.class + (student.section ? ' - ' + student.section : '');
         const parentName = student.parent_name || '—';
         const parentPhone = student.parent_phone || '—';
         const parentEmail = student.parent_email || '—';
         const address = student.address || '—';
-        const barcodeUrl = student.barcode_path ? '<?php echo config('app_url'); ?>/' + student.barcode_path : '';
+        const schoolName = '<?php echo e(config('school_name', 'School Name')); ?>';
+        const schoolYear = '<?php echo $activeSchoolYear ? e($activeSchoolYear['name']) : date('Y') . '-' . (date('Y') + 1); ?>';
         
         return `
             <div class="id-card-wrapper col-span-1">
                 <div class="flex flex-col sm:flex-row gap-3 justify-center items-center">
                     <!-- Front -->
-                    <div style="width: 180px; height: 288px; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #CE1126 100%); border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
-                        <div style="height: 100%; display: flex; flex-direction: column; align-items: center; padding: 12px; color: white;">
-                            <!-- Role Badge -->
-                            <div style="background: #CE1126; padding: 4px 16px; border-radius: 20px; margin-bottom: 8px;">
-                                <span style="font-size: 8px; font-weight: bold; letter-spacing: 1px; color: white;">STUDENT</span>
+                    <div style="width: 204px; height: 324px; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #CE1126 100%); border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+                        <!-- Header with School Name -->
+                        <div style="background: rgba(206,17,38,0.9); padding: 10px 12px; text-align: center;">
+                            <h3 style="font-size: 11px; font-weight: bold; color: #FCD116; text-transform: uppercase; letter-spacing: 0.5px;">${schoolName}</h3>
+                        </div>
+                        
+                        <div style="padding: 12px; display: flex; flex-direction: column; height: calc(100% - 42px);">
+                            <!-- Photo and Logo Row -->
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                <!-- Student Photo -->
+                                <div style="width: 80px; height: 90px; border: 2px solid #CE1126; border-radius: 6px; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center;">
+                                    <svg style="width: 40px; height: 40px; color: #CE1126;" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                                    </svg>
+                                </div>
+                                <!-- School Logo -->
+                                <div style="width: 70px; height: 70px; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center;">
+                                    <span style="font-size: 9px; color: rgba(255,255,255,0.6); text-align: center;">LOGO</span>
+                                </div>
                             </div>
-                            <!-- Photo -->
-                            <div style="width: 48px; height: 48px; border-radius: 50%; border: 3px solid #CE1126; background: rgba(206,17,38,0.2); display: flex; align-items: center; justify-content: center;">
-                                <svg style="width: 24px; height: 24px; color: #CE1126;" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                                </svg>
-                            </div>
-                            <!-- Name -->
-                            <h4 style="margin-top: 8px; font-size: 10px; font-weight: bold; color: #FCD116; text-align: center; line-height: 1.2;">${name}</h4>
-                            <!-- QR Code -->
-                            <div style="margin-top: 8px; background: white; border-radius: 10px; padding: 8px; border: 2px solid #e5e5e5;">
-                                <div id="qr-${index}" style="width: 80px; height: 80px;"></div>
-                                <p style="margin-top: 4px; font-size: 8px; color: #333; font-family: monospace; text-align: center; font-weight: bold;">${lrn}</p>
-                            </div>
-                            <!-- Bottom -->
-                            <div style="margin-top: auto; text-align: center;">
-                                <p style="font-size: 7px; color: rgba(255,255,255,0.7);">SCAN QR CODE FOR ATTENDANCE</p>
-                                <p style="font-size: 8px; font-weight: bold; color: #FCD116; margin-top: 2px;">LRN: ${lrn}</p>
+                            
+                            <!-- Student Info -->
+                            <div style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+                                <!-- ID Number -->
+                                <div style="margin-bottom: 8px;">
+                                    <p style="font-size: 9px; color: rgba(255,255,255,0.7); margin-bottom: 2px;">ID No.</p>
+                                    <p style="font-size: 13px; font-weight: bold; color: #FCD116; font-family: monospace;">${lrn}</p>
+                                </div>
+                                
+                                <!-- Student Name -->
+                                <div style="margin-bottom: 8px;">
+                                    <p style="font-size: 9px; color: rgba(255,255,255,0.7); margin-bottom: 2px;">Student Name</p>
+                                    <p style="font-size: 12px; font-weight: bold; color: white;">${name}</p>
+                                </div>
+                                
+                                <!-- Grade & Section -->
+                                <div>
+                                    <p style="font-size: 9px; color: rgba(255,255,255,0.7); margin-bottom: 2px;">Grade & Section</p>
+                                    <p style="font-size: 12px; font-weight: 600; color: #FCD116;">${gradeSection}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
+                    
                     <!-- Back -->
-                    <div style="width: 180px; height: 288px; background: linear-gradient(135deg, #CE1126 0%, #1a1a1a 50%, #0038A8 100%); border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
-                        <div style="height: 100%; display: flex; flex-direction: column; padding: 12px; color: white;">
-                            <!-- Emergency Header -->
-                            <div style="text-align: center; margin-bottom: 12px;">
-                                <h4 style="font-size: 10px; font-weight: bold; color: #FCD116;">IN CASE OF EMERGENCY</h4>
-                                <p style="font-size: 8px; color: rgba(255,255,255,0.8); margin-top: 2px;">Kindly notify</p>
+                    <div style="width: 204px; height: 324px; background: linear-gradient(135deg, #CE1126 0%, #1a1a1a 50%, #0038A8 100%); border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+                        <div style="padding: 16px; display: flex; flex-direction: column; height: 100%; align-items: center;">
+                            <!-- QR Code -->
+                            <div style="background: white; border-radius: 8px; padding: 10px; margin-bottom: 8px;">
+                                <div id="qr-${index}" style="width: 100px; height: 100px;"></div>
                             </div>
-                            <!-- Contact Info -->
-                            <div style="background: rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; flex: 1;">
-                                <div style="text-align: center; margin-bottom: 8px;">
-                                    <span style="font-size: 10px; font-weight: bold; color: white;">${parentName}</span>
-                                </div>
-                                <div style="text-align: center; margin-bottom: 8px;">
-                                    <span style="font-size: 12px; font-weight: bold; color: #FCD116;">${parentPhone}</span>
-                                </div>
-                                <div style="text-align: center; margin-bottom: 8px;">
-                                    <span style="font-size: 8px; color: white; word-break: break-all;">${parentEmail}</span>
-                                </div>
-                                <div style="text-align: center;">
-                                    <span style="font-size: 8px; color: white;">${address}</span>
-                                </div>
+                            
+                            <!-- School Year -->
+                            <div style="text-align: center; margin-bottom: 16px;">
+                                <p style="font-size: 10px; color: rgba(255,255,255,0.7);">S.Y.</p>
+                                <p style="font-size: 12px; font-weight: bold; color: #FCD116;">${schoolYear}</p>
                             </div>
-                            <!-- Barcode -->
-                            <div style="margin-top: 8px; background: white; border-radius: 6px; padding: 6px; text-align: center;">
-                                ${barcodeUrl ? `<img src="${barcodeUrl}" alt="Barcode" style="height: 28px; width: auto; margin: 0 auto;">` : '<div style="height: 28px; display: flex; align-items: center; justify-content: center; color: #999; font-size: 8px;">No barcode</div>'}
+                            
+                            <!-- Contact Person Section -->
+                            <div style="width: 100%; flex: 1; background: rgba(255,255,255,0.1); border-radius: 8px; padding: 10px;">
+                                <div style="text-align: center; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 2px solid #FCD116;">
+                                    <p style="font-size: 10px; font-weight: bold; color: #FCD116; text-transform: uppercase;">Contact Person</p>
+                                </div>
+                                
+                                <!-- Contact Info Lines -->
+                                <div style="padding: 0 4px;">
+                                    <div style="margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 4px;">
+                                        <p style="font-size: 10px; font-weight: 600; color: white;">${parentName}</p>
+                                    </div>
+                                    <div style="margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 4px;">
+                                        <p style="font-size: 10px; color: rgba(255,255,255,0.9);">${parentPhone}</p>
+                                    </div>
+                                    <div style="margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 4px;">
+                                        <p style="font-size: 9px; color: rgba(255,255,255,0.9); word-break: break-all;">${parentEmail}</p>
+                                    </div>
+                                    <div style="border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 4px;">
+                                        <p style="font-size: 9px; color: rgba(255,255,255,0.9);">${address}</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

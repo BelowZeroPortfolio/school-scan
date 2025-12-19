@@ -2,10 +2,14 @@
 /**
  * Attendance History Page
  * View and filter attendance records
+ * 
+ * Requirements: 7.2, 9.1, 9.2 - Add school year filter, class filter, filter by teacher's classes
  */
 
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/attendance.php';
+require_once __DIR__ . '/../includes/schoolyear.php';
+require_once __DIR__ . '/../includes/classes.php';
 
 // Require authentication
 requireAuth();
@@ -15,32 +19,99 @@ require_once __DIR__ . '/../includes/db.php';
 
 $pageTitle = 'Attendance History';
 
+// Get current user info
+$currentUser = getCurrentUser();
+$userId = $currentUser['id'] ?? null;
+
+// Get active school year and all school years for filter (Requirements: 9.1)
+$activeSchoolYear = getActiveSchoolYear();
+$allSchoolYears = getAllSchoolYears();
+
 // Get filter parameters
 $filterDate = $_GET['date'] ?? date('Y-m-d');
 $filterStudent = $_GET['student'] ?? '';
 $filterSearch = sanitizeString($_GET['search'] ?? '');
+
+// Teachers are locked to active school year only
+if (isTeacher()) {
+    $selectedSchoolYearId = $activeSchoolYear ? $activeSchoolYear['id'] : null;
+} else {
+    $selectedSchoolYearId = isset($_GET['school_year']) && $_GET['school_year'] !== '' ? (int)$_GET['school_year'] : ($activeSchoolYear ? $activeSchoolYear['id'] : null);
+}
+
+$selectedClassId = isset($_GET['class_id']) && $_GET['class_id'] !== '' ? (int)$_GET['class_id'] : null;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $perPage = 50;
 
-// Get attendance records
+// Get available classes for filter dropdown (Requirements: 7.2)
+$availableClasses = [];
+if (isTeacher() && $userId) {
+    // Teachers see only their classes
+    $availableClasses = getTeacherClasses($userId, $selectedSchoolYearId);
+} else {
+    // Admin/Operator see all classes for selected school year
+    $availableClasses = getClassesBySchoolYear($selectedSchoolYearId);
+}
+
+// Determine teacher ID for filtering (Requirements: 7.2)
+$teacherIdFilter = null;
+if (isTeacher() && $userId) {
+    $teacherIdFilter = $userId;
+}
+
+// Get attendance records with school year and class filtering (Requirements: 9.1, 9.2)
 if ($filterSearch) {
-    // Search by name, student ID, or LRN
+    // Search by name, student ID, or LRN - with school year and class filters
     $searchParam = '%' . $filterSearch . '%';
-    $sql = "SELECT a.*, 
-                   s.student_id, s.lrn, s.first_name, s.last_name, s.class, s.section,
-                   u.full_name as recorded_by_name
-            FROM attendance a
-            INNER JOIN students s ON a.student_id = s.id
-            LEFT JOIN users u ON a.recorded_by = u.id
-            WHERE (s.student_id LIKE ? OR s.lrn LIKE ? OR s.first_name LIKE ? OR s.last_name LIKE ? OR CONCAT(s.first_name, ' ', s.last_name) LIKE ?)
-            " . ($filterDate ? "AND a.attendance_date = ?" : "") . "
-            ORDER BY a.attendance_date DESC, a.check_in_time DESC
-            LIMIT 100";
     
+    $whereConditions = ["(s.student_id LIKE ? OR s.lrn LIKE ? OR s.first_name LIKE ? OR s.last_name LIKE ? OR CONCAT(s.first_name, ' ', s.last_name) LIKE ?)"];
     $params = [$searchParam, $searchParam, $searchParam, $searchParam, $searchParam];
+    
+    $joinClause = "INNER JOIN students s ON a.student_id = s.id
+                   LEFT JOIN users u ON a.recorded_by = u.id";
+    
     if ($filterDate) {
+        $whereConditions[] = "a.attendance_date = ?";
         $params[] = $filterDate;
     }
+    
+    // Add school year filter
+    if ($selectedSchoolYearId) {
+        $whereConditions[] = "a.school_year_id = ?";
+        $params[] = $selectedSchoolYearId;
+    }
+    
+    // Add class/teacher filtering
+    if ($selectedClassId || $teacherIdFilter) {
+        $joinClause .= " LEFT JOIN student_classes sc ON s.id = sc.student_id AND sc.is_active = 1
+                         LEFT JOIN classes c ON sc.class_id = c.id AND c.is_active = 1";
+        
+        if ($selectedSchoolYearId) {
+            $joinClause .= " AND c.school_year_id = " . (int)$selectedSchoolYearId;
+        }
+        
+        if ($selectedClassId) {
+            $whereConditions[] = "c.id = ?";
+            $params[] = $selectedClassId;
+        }
+        
+        if ($teacherIdFilter) {
+            $whereConditions[] = "c.teacher_id = ?";
+            $params[] = $teacherIdFilter;
+        }
+    }
+    
+    $whereClause = implode(' AND ', $whereConditions);
+    
+    $sql = "SELECT DISTINCT a.*, 
+                   s.student_id, s.lrn, s.first_name, s.last_name,
+                   COALESCE(c.grade_level, '') AS class, COALESCE(c.section, '') AS section,
+                   u.full_name as recorded_by_name
+            FROM attendance a
+            {$joinClause}
+            WHERE {$whereClause}
+            ORDER BY a.attendance_date DESC, a.check_in_time DESC
+            LIMIT 100";
     
     $records = dbFetchAll($sql, $params);
     $totalRecords = count($records);
@@ -50,26 +121,41 @@ if ($filterSearch) {
     $startDate = $_GET['start_date'] ?? date('Y-m-d', strtotime('-30 days'));
     $endDate = $_GET['end_date'] ?? date('Y-m-d');
     
+    $whereConditions = ["s.student_id = ?", "a.attendance_date BETWEEN ? AND ?"];
+    $params = [$filterStudent, $startDate, $endDate];
+    
+    // Add school year filter
+    if ($selectedSchoolYearId) {
+        $whereConditions[] = "a.school_year_id = ?";
+        $params[] = $selectedSchoolYearId;
+    }
+    
+    $whereClause = implode(' AND ', $whereConditions);
+    
     $sql = "SELECT a.*, 
-                   s.student_id, s.first_name, s.last_name, s.class, s.section,
+                   s.student_id, s.first_name, s.last_name,
+                   COALESCE(c.grade_level, '') AS class, COALESCE(c.section, '') AS section,
                    u.full_name as recorded_by_name
             FROM attendance a
             INNER JOIN students s ON a.student_id = s.id
+            LEFT JOIN student_classes sc ON s.id = sc.student_id AND sc.is_active = 1
+            LEFT JOIN classes c ON sc.class_id = c.id AND c.is_active = 1
+            LEFT JOIN school_years sy ON c.school_year_id = sy.id AND sy.is_active = 1
             LEFT JOIN users u ON a.recorded_by = u.id
-            WHERE s.student_id = ? AND a.attendance_date BETWEEN ? AND ?
+            WHERE {$whereClause}
             ORDER BY a.attendance_date DESC, a.check_in_time DESC";
     
-    $records = dbFetchAll($sql, [$filterStudent, $startDate, $endDate]);
+    $records = dbFetchAll($sql, $params);
     $totalRecords = count($records);
     $totalPages = 1;
 } elseif ($filterDate) {
-    // Filter by date
-    $records = getAttendanceByDate($filterDate);
+    // Filter by date with school year, class, and teacher filters
+    $records = getAttendanceByDate($filterDate, $selectedSchoolYearId, $selectedClassId, $teacherIdFilter);
     $totalRecords = count($records);
     $totalPages = 1;
 } else {
-    // Get all recent records with pagination
-    $result = getRecentAttendance($page, $perPage);
+    // Get all recent records with pagination and filters
+    $result = getRecentAttendance($page, $perPage, $selectedSchoolYearId, $selectedClassId, $teacherIdFilter);
     $records = $result['records'];
     $totalRecords = $result['total'];
     $totalPages = $result['total_pages'];
@@ -92,11 +178,11 @@ $students = dbFetchAll("SELECT student_id, first_name, last_name FROM students W
                 <p class="text-sm sm:text-base text-gray-500 mt-1">View and filter attendance records</p>
             </div>
 
-            <!-- Filters -->
+            <!-- Filters (Requirements: 9.1, 9.2) -->
             <div class="bg-white rounded-xl p-6 border border-gray-100 mb-6">
                 <h3 class="text-lg font-semibold text-gray-900 mb-4">Filters</h3>
                 
-                <form method="GET" action="" id="filterForm" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <form method="GET" action="" id="filterForm" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     <div>
                         <label for="search" class="block text-sm font-medium text-gray-700 mb-2">
                             Search
@@ -107,7 +193,6 @@ $students = dbFetchAll("SELECT student_id, first_name, last_name FROM students W
                             name="search" 
                             value="<?php echo e($filterSearch); ?>"
                             placeholder="Name, ID, or LRN..."
-                            oninput="debounceFilter()"
                             class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors theme-bg-card theme-text-primary"
                         >
                     </div>
@@ -121,9 +206,56 @@ $students = dbFetchAll("SELECT student_id, first_name, last_name FROM students W
                             id="date" 
                             name="date" 
                             value="<?php echo e($filterDate); ?>"
-                            onchange="debounceFilter()"
                             class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors theme-bg-card theme-text-primary"
                         >
+                    </div>
+                    
+                    <!-- School Year Filter (Requirements: 9.1) - Hidden for teachers -->
+                    <?php if (!isTeacher()): ?>
+                    <div>
+                        <label for="school_year" class="block text-sm font-medium text-gray-700 mb-2">
+                            School Year
+                        </label>
+                        <select 
+                            id="school_year" 
+                            name="school_year"
+                            class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors theme-bg-card theme-text-primary"
+                        >
+                            <option value="">All School Years</option>
+                            <?php foreach ($allSchoolYears as $sy): ?>
+                                <option value="<?php echo $sy['id']; ?>" <?php echo $selectedSchoolYearId == $sy['id'] ? 'selected' : ''; ?>>
+                                    <?php echo e($sy['name']); ?><?php echo $sy['is_active'] ? ' (Active)' : ''; ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <?php else: ?>
+                    <!-- Teachers see current school year as read-only info -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">School Year</label>
+                        <div class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 text-gray-600">
+                            <?php echo $activeSchoolYear ? e($activeSchoolYear['name']) : 'No active school year'; ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                    
+                    <!-- Class Filter (Requirements: 7.2) -->
+                    <div>
+                        <label for="class_id" class="block text-sm font-medium text-gray-700 mb-2">
+                            Class
+                        </label>
+                        <select 
+                            id="class_id" 
+                            name="class_id"
+                            class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors theme-bg-card theme-text-primary"
+                        >
+                            <option value="">All Classes</option>
+                            <?php foreach ($availableClasses as $class): ?>
+                                <option value="<?php echo $class['id']; ?>" <?php echo $selectedClassId == $class['id'] ? 'selected' : ''; ?>>
+                                    <?php echo e($class['grade_level'] . ' - ' . $class['section']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                     
                     <div>
@@ -133,7 +265,6 @@ $students = dbFetchAll("SELECT student_id, first_name, last_name FROM students W
                         <select 
                             id="student" 
                             name="student"
-                            onchange="debounceFilter()"
                             class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors theme-bg-card theme-text-primary"
                         >
                             <option value="">All Students</option>
@@ -147,36 +278,6 @@ $students = dbFetchAll("SELECT student_id, first_name, last_name FROM students W
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    
-                    <?php if ($filterStudent): ?>
-                        <div>
-                            <label for="start_date" class="block text-sm font-medium text-gray-700 mb-2">
-                                Start Date
-                            </label>
-                            <input 
-                                type="date" 
-                                id="start_date" 
-                                name="start_date" 
-                                value="<?php echo e($_GET['start_date'] ?? date('Y-m-d', strtotime('-30 days'))); ?>"
-                                onchange="debounceFilter()"
-                                class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors theme-bg-card theme-text-primary"
-                            >
-                        </div>
-                        
-                        <div>
-                            <label for="end_date" class="block text-sm font-medium text-gray-700 mb-2">
-                                End Date
-                            </label>
-                            <input 
-                                type="date" 
-                                id="end_date" 
-                                name="end_date" 
-                                value="<?php echo e($_GET['end_date'] ?? date('Y-m-d')); ?>"
-                                onchange="debounceFilter()"
-                                class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors theme-bg-card theme-text-primary"
-                            >
-                        </div>
-                    <?php endif; ?>
                     
                     <div class="flex items-end gap-2">
                         <button 
@@ -194,17 +295,37 @@ $students = dbFetchAll("SELECT student_id, first_name, last_name FROM students W
                     </div>
                 </form>
                 
-                <script>
-                    let debounceTimer = null;
-                    function debounceFilter() {
-                        clearTimeout(debounceTimer);
-                        debounceTimer = setTimeout(() => {
-                            document.getElementById('filterForm').submit();
-                        }, 500);
-                    }
-                </script>
-                
-
+                <?php if ($filterStudent): ?>
+                <div class="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="start_date" class="block text-sm font-medium text-gray-700 mb-2">
+                            Start Date
+                        </label>
+                        <input 
+                            type="date" 
+                            id="start_date" 
+                            name="start_date" 
+                            form="filterForm"
+                            value="<?php echo e($_GET['start_date'] ?? date('Y-m-d', strtotime('-30 days'))); ?>"
+                            class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors theme-bg-card theme-text-primary"
+                        >
+                    </div>
+                    
+                    <div>
+                        <label for="end_date" class="block text-sm font-medium text-gray-700 mb-2">
+                            End Date
+                        </label>
+                        <input 
+                            type="date" 
+                            id="end_date" 
+                            name="end_date" 
+                            form="filterForm"
+                            value="<?php echo e($_GET['end_date'] ?? date('Y-m-d')); ?>"
+                            class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors theme-bg-card theme-text-primary"
+                        >
+                    </div>
+                </div>
+                <?php endif; ?>
             </div>
 
             <!-- Results Summary -->

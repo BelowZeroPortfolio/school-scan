@@ -2,10 +2,13 @@
 /**
  * Excel Export Functions
  * Export attendance reports to Excel format using PhpSpreadsheet
+ * 
+ * Requirements: 8.2, 8.3
  */
 
 // require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/logger.php';
+require_once __DIR__ . '/reports.php';
 
 // use PhpOffice\PhpSpreadsheet\Spreadsheet;
 // use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -19,14 +22,27 @@ require_once __DIR__ . '/logger.php';
  * @param array $data Report data
  * @param array $stats Report statistics
  * @param string $filename Output filename (without extension)
+ * @param array $options Export options
+ *   - school_year_id: School year ID for filename
+ *   - school_year_name: School year name for header
+ *   - include_school_year: Whether to include school year in filename (default: true)
  * @return string|false File path on success, false on failure
+ * 
+ * Requirements: 8.2, 8.3
  */
-function exportToExcel($data, $stats = [], $filename = 'attendance_report') {
+function exportToExcel($data, $stats = [], $filename = 'attendance_report', $options = []) {
     try {
         // Ensure storage directory exists
         $exportDir = __DIR__ . '/../storage/exports';
         if (!is_dir($exportDir)) {
             mkdir($exportDir, 0755, true);
+        }
+        
+        // Build filename with school year if enabled (Requirements: 8.3)
+        $includeSchoolYear = $options['include_school_year'] ?? true;
+        if ($includeSchoolYear) {
+            $schoolYearId = $options['school_year_id'] ?? ($stats['school_year_id'] ?? null);
+            $filename = buildExportFilename($filename, $schoolYearId);
         }
         
         // Generate unique filename
@@ -62,6 +78,17 @@ function exportToExcel($data, $stats = [], $filename = 'attendance_report') {
         $sheet->setCellValue('A' . $row, 'Generated:');
         $sheet->setCellValue('B' . $row, date('Y-m-d H:i:s'));
         $row++;
+        
+        // School year info (Requirements: 8.3)
+        $schoolYearName = $options['school_year_name'] ?? ($stats['school_year_name'] ?? null);
+        if (!$schoolYearName && isset($options['school_year_id'])) {
+            $schoolYearName = getReportSchoolYearName($options['school_year_id']);
+        }
+        if ($schoolYearName) {
+            $sheet->setCellValue('A' . $row, 'School Year:');
+            $sheet->setCellValue('B' . $row, $schoolYearName);
+            $row++;
+        }
         
         if (!empty($stats['date_range']['start']) && !empty($stats['date_range']['end'])) {
             $sheet->setCellValue('A' . $row, 'Period:');
@@ -129,12 +156,16 @@ function exportToExcel($data, $stats = [], $filename = 'attendance_report') {
             
             // Table data
             foreach ($data as $record) {
+                // Use class-based data if available, fall back to legacy
+                $classValue = $record['class_grade'] ?? $record['class'] ?? '';
+                $sectionValue = $record['class_section'] ?? $record['section'] ?? '';
+                
                 $sheet->setCellValue('A' . $row, $record['attendance_date'] ?? '');
                 $sheet->setCellValue('B' . $row, $record['student_number'] ?? '');
                 $sheet->setCellValue('C' . $row, $record['first_name'] ?? '');
                 $sheet->setCellValue('D' . $row, $record['last_name'] ?? '');
-                $sheet->setCellValue('E' . $row, $record['class'] ?? '');
-                $sheet->setCellValue('F' . $row, $record['section'] ?? '');
+                $sheet->setCellValue('E' . $row, $classValue);
+                $sheet->setCellValue('F' . $row, $sectionValue);
                 $sheet->setCellValue('G' . $row, $record['check_in_time'] ?? '');
                 $sheet->setCellValue('H' . $row, ucfirst($record['status'] ?? ''));
                 $sheet->setCellValue('I' . $row, $record['recorded_by'] ?? '');
@@ -169,7 +200,8 @@ function exportToExcel($data, $stats = [], $filename = 'attendance_report') {
         
         logInfo('Excel export created', [
             'filename' => basename($filepath),
-            'record_count' => count($data)
+            'record_count' => count($data),
+            'school_year' => $schoolYearName ?? null
         ]);
         
         return $filepath;
@@ -186,14 +218,27 @@ function exportToExcel($data, $stats = [], $filename = 'attendance_report') {
  * 
  * @param array $data Student summary data
  * @param string $filename Output filename (without extension)
+ * @param array $options Export options
+ *   - school_year_id: School year ID for filename
+ *   - school_year_name: School year name for header
+ *   - include_school_year: Whether to include school year in filename (default: true)
  * @return string|false File path on success, false on failure
+ * 
+ * Requirements: 8.2, 8.3
  */
-function exportStudentSummaryExcel($data, $filename = 'student_summary') {
+function exportStudentSummaryExcel($data, $filename = 'student_summary', $options = []) {
     try {
         // Ensure storage directory exists
         $exportDir = __DIR__ . '/../storage/exports';
         if (!is_dir($exportDir)) {
             mkdir($exportDir, 0755, true);
+        }
+        
+        // Build filename with school year if enabled (Requirements: 8.3)
+        $includeSchoolYear = $options['include_school_year'] ?? true;
+        if ($includeSchoolYear) {
+            $schoolYearId = $options['school_year_id'] ?? null;
+            $filename = buildExportFilename($filename, $schoolYearId);
         }
         
         // Generate unique filename
@@ -229,7 +274,20 @@ function exportStudentSummaryExcel($data, $filename = 'student_summary') {
         // Report info
         $sheet->setCellValue('A' . $row, 'Generated:');
         $sheet->setCellValue('B' . $row, date('Y-m-d H:i:s'));
-        $row += 2;
+        $row++;
+        
+        // School year info (Requirements: 8.3)
+        $schoolYearName = $options['school_year_name'] ?? null;
+        if (!$schoolYearName && isset($options['school_year_id'])) {
+            $schoolYearName = getReportSchoolYearName($options['school_year_id']);
+        }
+        if ($schoolYearName) {
+            $sheet->setCellValue('A' . $row, 'School Year:');
+            $sheet->setCellValue('B' . $row, $schoolYearName);
+            $row++;
+        }
+        
+        $row++;
         
         // Table header
         $headerRow = $row;
@@ -254,11 +312,15 @@ function exportStudentSummaryExcel($data, $filename = 'student_summary') {
         
         // Table data
         foreach ($data as $record) {
+            // Use class-based data if available, fall back to legacy
+            $classValue = $record['class_grade'] ?? $record['class'] ?? '';
+            $sectionValue = $record['class_section'] ?? $record['section'] ?? '';
+            
             $sheet->setCellValue('A' . $row, $record['student_number'] ?? '');
             $sheet->setCellValue('B' . $row, $record['first_name'] ?? '');
             $sheet->setCellValue('C' . $row, $record['last_name'] ?? '');
-            $sheet->setCellValue('D' . $row, $record['class'] ?? '');
-            $sheet->setCellValue('E' . $row, $record['section'] ?? '');
+            $sheet->setCellValue('D' . $row, $classValue);
+            $sheet->setCellValue('E' . $row, $sectionValue);
             $sheet->setCellValue('F' . $row, $record['present_count'] ?? 0);
             $sheet->setCellValue('G' . $row, $record['late_count'] ?? 0);
             $sheet->setCellValue('H' . $row, $record['absent_count'] ?? 0);
@@ -294,7 +356,8 @@ function exportStudentSummaryExcel($data, $filename = 'student_summary') {
         
         logInfo('Student summary Excel export created', [
             'filename' => basename($filepath),
-            'record_count' => count($data)
+            'record_count' => count($data),
+            'school_year' => $schoolYearName ?? null
         ]);
         
         return $filepath;

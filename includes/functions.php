@@ -318,3 +318,29 @@ function getClientIp() {
 function getUserAgent() {
     return $_SERVER['HTTP_USER_AGENT'] ?? '';
 }
+
+/**
+ * Generate a unique student ID in format STU-YYYY-NNNN
+ * 
+ * @return string Generated student ID (e.g., STU-2025-0001)
+ */
+function generateStudentId() {
+    $year = date('Y');
+    $prefix = "STU-{$year}-";
+    
+    // Get the highest student ID number for this year
+    $sql = "SELECT student_id FROM students 
+            WHERE student_id LIKE ? 
+            ORDER BY student_id DESC 
+            LIMIT 1";
+    
+    $result = dbFetchOne($sql, [$prefix . '%']);
+    
+    if ($result && preg_match('/STU-\d{4}-(\d{4})$/', $result['student_id'], $matches)) {
+        $nextNumber = (int)$matches[1] + 1;
+    } else {
+        $nextNumber = 1;
+    }
+    
+    return $prefix . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+}

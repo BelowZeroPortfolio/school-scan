@@ -28,14 +28,8 @@ if (!$student) {
     redirect(config('app_url') . '/pages/students.php');
 }
 
-// Extract grade number from class field (e.g., "Grade 10" -> "10")
-$currentGrade = '';
-if (preg_match('/Grade\s*(\d+)/i', $student['class'] ?? '', $matches)) {
-    $currentGrade = $matches[1];
-}
-
 $errors = [];
-$formData = array_merge($student, ['grade' => $currentGrade]);
+$formData = $student;
 
 if (isPost()) {
     verifyCsrf();
@@ -59,8 +53,6 @@ if (isPost()) {
         'lrn' => sanitizeString($_POST['lrn'] ?? ''),
         'first_name' => sanitizeString($_POST['first_name'] ?? ''),
         'last_name' => sanitizeString($_POST['last_name'] ?? ''),
-        'grade' => sanitizeString($_POST['grade'] ?? ''),
-        'section' => sanitizeString($_POST['section'] ?? ''),
         'parent_name' => sanitizeString($_POST['parent_name'] ?? ''),
         'parent_phone' => $rawPhone,
         'parent_email' => sanitizeEmail($_POST['parent_email'] ?? ''),
@@ -69,7 +61,7 @@ if (isPost()) {
         'is_active' => isset($_POST['is_active']) ? 1 : 0,
     ];
     
-    $required = ['lrn', 'first_name', 'last_name', 'grade', 'parent_name', 'parent_phone', 'address'];
+    $required = ['lrn', 'first_name', 'last_name', 'parent_name', 'parent_phone', 'address'];
     $missing = validateRequired($required, $formData);
     
     if (!empty($missing)) {
@@ -78,10 +70,6 @@ if (isPost()) {
     
     if ($formData['lrn'] && !preg_match('/^\d{12}$/', $formData['lrn'])) {
         $errors['lrn'] = 'LRN must be exactly 12 digits.';
-    }
-    
-    if ($formData['grade'] && !in_array($formData['grade'], ['7', '8', '9', '10', '11', '12'])) {
-        $errors['grade'] = 'Please select a valid grade level.';
     }
     
     if ($formData['parent_email'] && !validateEmail($formData['parent_email'])) {
@@ -113,15 +101,16 @@ if (isPost()) {
                 $barcodePath = regenerateStudentBarcode($formData['lrn'], $student['barcode_path']);
             }
             
+            // Note: class/section now managed via student_classes -> classes relationship
             $updateSql = "UPDATE students SET
-                            student_id = ?, lrn = ?, first_name = ?, last_name = ?, class = ?, section = ?,
+                            student_id = ?, lrn = ?, first_name = ?, last_name = ?,
                             barcode_path = ?, parent_name = ?, parent_phone = ?, parent_email = ?,
                             address = ?, date_of_birth = ?, is_active = ?, updated_at = NOW()
                           WHERE id = ?";
             
             $params = [
                 $formData['lrn'], $formData['lrn'], $formData['first_name'], $formData['last_name'],
-                'Grade ' . $formData['grade'], $formData['section'], $barcodePath, $formData['parent_name'],
+                $barcodePath, $formData['parent_name'],
                 $formData['parent_phone'], $formData['parent_email'], $formData['address'],
                 $formData['date_of_birth'] ?: null, $formData['is_active'], $studentId
             ];
@@ -233,33 +222,7 @@ $currentUser = getCurrentUser();
                                 class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500">
                         </div>
                         
-                        <!-- Grade -->
-                        <div>
-                            <label for="grade" class="block text-sm font-medium text-gray-700 mb-1">
-                                Grade Level <span class="text-red-500">*</span>
-                            </label>
-                            <select name="grade" id="grade" required
-                                class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 <?php echo isset($errors['grade']) ? 'border-red-300' : ''; ?>">
-                                <option value="">Select Grade</option>
-                                <?php for ($g = 7; $g <= 12; $g++): ?>
-                                    <option value="<?php echo $g; ?>" <?php echo ($formData['grade'] ?? '') == $g ? 'selected' : ''; ?>>
-                                        Grade <?php echo $g; ?>
-                                    </option>
-                                <?php endfor; ?>
-                            </select>
-                            <?php if (isset($errors['grade'])): ?>
-                                <p class="mt-1 text-sm text-red-600"><?php echo e($errors['grade']); ?></p>
-                            <?php endif; ?>
-                        </div>
-                        
-                        <!-- Section -->
-                        <div>
-                            <label for="section" class="block text-sm font-medium text-gray-700 mb-1">Section</label>
-                            <input type="text" name="section" id="section"
-                                value="<?php echo e($formData['section'] ?? ''); ?>"
-                                class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500"
-                                placeholder="e.g., Einstein, Newton">
-                        </div>
+                        <!-- Note: Class/Section is managed via Class Enrollment (see student-view.php) -->
                         
                         <!-- Status -->
                         <div>

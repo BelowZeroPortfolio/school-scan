@@ -2,23 +2,39 @@
 /**
  * CSV Export Functions
  * Export attendance reports to CSV format
+ * 
+ * Requirements: 8.2, 8.3
  */
 
 require_once __DIR__ . '/logger.php';
+require_once __DIR__ . '/reports.php';
 
 /**
  * Export report data to CSV
  * 
  * @param array $data Report data
  * @param string $filename Output filename (without extension)
+ * @param array $options Export options
+ *   - school_year_id: School year ID for filename
+ *   - school_year_name: School year name for header
+ *   - include_school_year: Whether to include school year in filename (default: true)
  * @return string|false File path on success, false on failure
+ * 
+ * Requirements: 8.2, 8.3
  */
-function exportToCsv($data, $filename = 'attendance_report') {
+function exportToCsv($data, $filename = 'attendance_report', $options = []) {
     try {
         // Ensure storage directory exists
         $exportDir = __DIR__ . '/../storage/exports';
         if (!is_dir($exportDir)) {
             mkdir($exportDir, 0755, true);
+        }
+        
+        // Build filename with school year if enabled (Requirements: 8.3)
+        $includeSchoolYear = $options['include_school_year'] ?? true;
+        if ($includeSchoolYear) {
+            $schoolYearId = $options['school_year_id'] ?? null;
+            $filename = buildExportFilename($filename, $schoolYearId);
         }
         
         // Generate unique filename
@@ -33,6 +49,16 @@ function exportToCsv($data, $filename = 'attendance_report') {
         
         // Write UTF-8 BOM for Excel compatibility
         fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
+        
+        // Write school year header if available (Requirements: 8.3)
+        $schoolYearName = $options['school_year_name'] ?? null;
+        if (!$schoolYearName && isset($options['school_year_id'])) {
+            $schoolYearName = getReportSchoolYearName($options['school_year_id']);
+        }
+        if ($schoolYearName) {
+            fputcsv($file, ['School Year: ' . $schoolYearName]);
+            fputcsv($file, []); // Empty row for spacing
+        }
         
         // Write header row
         $headers = [
@@ -50,13 +76,17 @@ function exportToCsv($data, $filename = 'attendance_report') {
         
         // Write data rows
         foreach ($data as $row) {
+            // Use class-based data if available, fall back to legacy
+            $classValue = $row['class_grade'] ?? $row['class'] ?? '';
+            $sectionValue = $row['class_section'] ?? $row['section'] ?? '';
+            
             $csvRow = [
                 $row['attendance_date'] ?? '',
                 $row['student_number'] ?? '',
                 $row['first_name'] ?? '',
                 $row['last_name'] ?? '',
-                $row['class'] ?? '',
-                $row['section'] ?? '',
+                $classValue,
+                $sectionValue,
                 $row['check_in_time'] ?? '',
                 ucfirst($row['status'] ?? ''),
                 $row['recorded_by'] ?? ''
@@ -68,7 +98,8 @@ function exportToCsv($data, $filename = 'attendance_report') {
         
         logInfo('CSV export created', [
             'filename' => basename($filepath),
-            'record_count' => count($data)
+            'record_count' => count($data),
+            'school_year' => $schoolYearName
         ]);
         
         return $filepath;
@@ -85,14 +116,27 @@ function exportToCsv($data, $filename = 'attendance_report') {
  * 
  * @param array $data Student summary data
  * @param string $filename Output filename (without extension)
+ * @param array $options Export options
+ *   - school_year_id: School year ID for filename
+ *   - school_year_name: School year name for header
+ *   - include_school_year: Whether to include school year in filename (default: true)
  * @return string|false File path on success, false on failure
+ * 
+ * Requirements: 8.2, 8.3
  */
-function exportStudentSummaryCsv($data, $filename = 'student_summary') {
+function exportStudentSummaryCsv($data, $filename = 'student_summary', $options = []) {
     try {
         // Ensure storage directory exists
         $exportDir = __DIR__ . '/../storage/exports';
         if (!is_dir($exportDir)) {
             mkdir($exportDir, 0755, true);
+        }
+        
+        // Build filename with school year if enabled (Requirements: 8.3)
+        $includeSchoolYear = $options['include_school_year'] ?? true;
+        if ($includeSchoolYear) {
+            $schoolYearId = $options['school_year_id'] ?? null;
+            $filename = buildExportFilename($filename, $schoolYearId);
         }
         
         // Generate unique filename
@@ -107,6 +151,16 @@ function exportStudentSummaryCsv($data, $filename = 'student_summary') {
         
         // Write UTF-8 BOM for Excel compatibility
         fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
+        
+        // Write school year header if available (Requirements: 8.3)
+        $schoolYearName = $options['school_year_name'] ?? null;
+        if (!$schoolYearName && isset($options['school_year_id'])) {
+            $schoolYearName = getReportSchoolYearName($options['school_year_id']);
+        }
+        if ($schoolYearName) {
+            fputcsv($file, ['School Year: ' . $schoolYearName]);
+            fputcsv($file, []); // Empty row for spacing
+        }
         
         // Write header row
         $headers = [
@@ -125,12 +179,16 @@ function exportStudentSummaryCsv($data, $filename = 'student_summary') {
         
         // Write data rows
         foreach ($data as $row) {
+            // Use class-based data if available, fall back to legacy
+            $classValue = $row['class_grade'] ?? $row['class'] ?? '';
+            $sectionValue = $row['class_section'] ?? $row['section'] ?? '';
+            
             $csvRow = [
                 $row['student_number'] ?? '',
                 $row['first_name'] ?? '',
                 $row['last_name'] ?? '',
-                $row['class'] ?? '',
-                $row['section'] ?? '',
+                $classValue,
+                $sectionValue,
                 $row['present_count'] ?? 0,
                 $row['late_count'] ?? 0,
                 $row['absent_count'] ?? 0,
@@ -144,7 +202,8 @@ function exportStudentSummaryCsv($data, $filename = 'student_summary') {
         
         logInfo('Student summary CSV export created', [
             'filename' => basename($filepath),
-            'record_count' => count($data)
+            'record_count' => count($data),
+            'school_year' => $schoolYearName
         ]);
         
         return $filepath;

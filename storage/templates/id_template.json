@@ -1,0 +1,19 @@
+{
+    "school_name": "sample",
+    "school_address": "sample - sample",
+    "header_bg_color": "#ff4760",
+    "header_text_color": "#fcd116",
+    "card_bg_color": "#212121",
+    "card_text_color": "#ffffff",
+    "accent_color": "#ffd000",
+    "show_lrn": true,
+    "show_student_id": false,
+    "show_grade_section": true,
+    "show_school_year": true,
+    "show_parent_info": true,
+    "show_address": true,
+    "show_qr_code": true,
+    "show_barcode": false,
+    "logo_path": "",
+    "card_style": "modern"
+}

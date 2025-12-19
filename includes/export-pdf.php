@@ -2,10 +2,13 @@
 /**
  * PDF Export Functions
  * Export attendance reports to PDF format using TCPDF
+ * 
+ * Requirements: 8.2, 8.3
  */
 
 // require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/logger.php';
+require_once __DIR__ . '/reports.php';
 
 // use TCPDF;
 
@@ -15,14 +18,27 @@ require_once __DIR__ . '/logger.php';
  * @param array $data Report data
  * @param array $stats Report statistics
  * @param string $filename Output filename (without extension)
+ * @param array $options Export options
+ *   - school_year_id: School year ID for filename
+ *   - school_year_name: School year name for header
+ *   - include_school_year: Whether to include school year in filename (default: true)
  * @return string|false File path on success, false on failure
+ * 
+ * Requirements: 8.2, 8.3
  */
-function exportToPdf($data, $stats = [], $filename = 'attendance_report') {
+function exportToPdf($data, $stats = [], $filename = 'attendance_report', $options = []) {
     try {
         // Ensure storage directory exists
         $exportDir = __DIR__ . '/../storage/exports';
         if (!is_dir($exportDir)) {
             mkdir($exportDir, 0755, true);
+        }
+        
+        // Build filename with school year if enabled (Requirements: 8.3)
+        $includeSchoolYear = $options['include_school_year'] ?? true;
+        if ($includeSchoolYear) {
+            $schoolYearId = $options['school_year_id'] ?? ($stats['school_year_id'] ?? null);
+            $filename = buildExportFilename($filename, $schoolYearId);
         }
         
         // Generate unique filename
@@ -60,6 +76,15 @@ function exportToPdf($data, $stats = [], $filename = 'attendance_report') {
         // Report info
         $pdf->SetFont('helvetica', '', 10);
         $pdf->Cell(0, 6, 'Generated: ' . date('Y-m-d H:i:s'), 0, 1);
+        
+        // School year info (Requirements: 8.3)
+        $schoolYearName = $options['school_year_name'] ?? ($stats['school_year_name'] ?? null);
+        if (!$schoolYearName && isset($options['school_year_id'])) {
+            $schoolYearName = getReportSchoolYearName($options['school_year_id']);
+        }
+        if ($schoolYearName) {
+            $pdf->Cell(0, 6, 'School Year: ' . $schoolYearName, 0, 1);
+        }
         
         if (!empty($stats['date_range']['start']) && !empty($stats['date_range']['end'])) {
             $pdf->Cell(0, 6, 'Period: ' . $stats['date_range']['start'] . ' to ' . $stats['date_range']['end'], 0, 1);
@@ -136,7 +161,9 @@ function exportToPdf($data, $stats = [], $filename = 'attendance_report') {
                 }
                 
                 $name = ($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '');
-                $class = ($row['class'] ?? '') . ($row['section'] ?? '');
+                $classValue = $row['class_grade'] ?? $row['class'] ?? '';
+                $sectionValue = $row['class_section'] ?? $row['section'] ?? '';
+                $class = $classValue . ($sectionValue ? ' ' . $sectionValue : '');
                 $time = date('H:i', strtotime($row['check_in_time'] ?? ''));
                 
                 $pdf->Cell(25, 6, $row['attendance_date'] ?? '', 1, 0, 'C', $fill);
@@ -155,7 +182,8 @@ function exportToPdf($data, $stats = [], $filename = 'attendance_report') {
         
         logInfo('PDF export created', [
             'filename' => basename($filepath),
-            'record_count' => count($data)
+            'record_count' => count($data),
+            'school_year' => $schoolYearName
         ]);
         
         return $filepath;
@@ -172,14 +200,27 @@ function exportToPdf($data, $stats = [], $filename = 'attendance_report') {
  * 
  * @param array $data Student summary data
  * @param string $filename Output filename (without extension)
+ * @param array $options Export options
+ *   - school_year_id: School year ID for filename
+ *   - school_year_name: School year name for header
+ *   - include_school_year: Whether to include school year in filename (default: true)
  * @return string|false File path on success, false on failure
+ * 
+ * Requirements: 8.2, 8.3
  */
-function exportStudentSummaryPdf($data, $filename = 'student_summary') {
+function exportStudentSummaryPdf($data, $filename = 'student_summary', $options = []) {
     try {
         // Ensure storage directory exists
         $exportDir = __DIR__ . '/../storage/exports';
         if (!is_dir($exportDir)) {
             mkdir($exportDir, 0755, true);
+        }
+        
+        // Build filename with school year if enabled (Requirements: 8.3)
+        $includeSchoolYear = $options['include_school_year'] ?? true;
+        if ($includeSchoolYear) {
+            $schoolYearId = $options['school_year_id'] ?? null;
+            $filename = buildExportFilename($filename, $schoolYearId);
         }
         
         // Generate unique filename
@@ -213,6 +254,16 @@ function exportStudentSummaryPdf($data, $filename = 'student_summary') {
         // Report info
         $pdf->SetFont('helvetica', '', 10);
         $pdf->Cell(0, 6, 'Generated: ' . date('Y-m-d H:i:s'), 0, 1);
+        
+        // School year info (Requirements: 8.3)
+        $schoolYearName = $options['school_year_name'] ?? null;
+        if (!$schoolYearName && isset($options['school_year_id'])) {
+            $schoolYearName = getReportSchoolYearName($options['school_year_id']);
+        }
+        if ($schoolYearName) {
+            $pdf->Cell(0, 6, 'School Year: ' . $schoolYearName, 0, 1);
+        }
+        
         $pdf->Ln(5);
         
         // Table header
@@ -259,7 +310,10 @@ function exportStudentSummaryPdf($data, $filename = 'student_summary') {
             }
             
             $name = ($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '');
-            $class = ($row['class'] ?? '') . ($row['section'] ?? '');
+            // Use class-based data if available, fall back to legacy
+            $classValue = $row['class_grade'] ?? $row['class'] ?? '';
+            $sectionValue = $row['class_section'] ?? $row['section'] ?? '';
+            $class = $classValue . ($sectionValue ? ' ' . $sectionValue : '');
             
             $pdf->Cell(30, 6, $row['student_number'] ?? '', 1, 0, 'C', $fill);
             $pdf->Cell(50, 6, substr($name, 0, 30), 1, 0, 'L', $fill);
@@ -278,7 +332,8 @@ function exportStudentSummaryPdf($data, $filename = 'student_summary') {
         
         logInfo('Student summary PDF export created', [
             'filename' => basename($filepath),
-            'record_count' => count($data)
+            'record_count' => count($data),
+            'school_year' => $schoolYearName ?? null
         ]);
         
         return $filepath;

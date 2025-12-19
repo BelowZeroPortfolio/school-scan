@@ -176,7 +176,7 @@ function getCurrentUser() {
 /**
  * Check if user has specific role
  * 
- * @param string $role Role to check (admin, operator, viewer)
+ * @param string $role Role to check (admin, operator, viewer, teacher)
  * @return bool True if user has role
  */
 function hasRole($role) {
@@ -191,8 +191,42 @@ function hasRole($role) {
         return true;
     }
     
+    // Teacher has operator-level access for attendance and student management
+    if ($userRole === 'teacher') {
+        // Teachers can access operator-level features (scanning, student management)
+        if ($role === 'operator' || $role === 'viewer') {
+            return true;
+        }
+    }
+    
     // Check specific role
     return $userRole === $role;
+}
+
+/**
+ * Check if current user is a teacher
+ * 
+ * @return bool True if user has teacher role
+ */
+function isTeacher() {
+    if (!isLoggedIn()) {
+        return false;
+    }
+    
+    return ($_SESSION['role'] ?? null) === 'teacher';
+}
+
+/**
+ * Check if current user is an admin
+ * 
+ * @return bool True if user has admin role
+ */
+function isAdmin() {
+    if (!isLoggedIn()) {
+        return false;
+    }
+    
+    return ($_SESSION['role'] ?? null) === 'admin';
 }
 
 /**
@@ -326,4 +360,43 @@ function cleanExpiredSessions() {
         }
         return 0;
     }
+}
+
+/**
+ * Get the appropriate dashboard URL based on user role
+ * Teachers get redirected to a teacher-specific dashboard view
+ * 
+ * @return string Dashboard URL
+ */
+function getDashboardUrl() {
+    $baseUrl = config('app_url') . '/pages/dashboard.php';
+    
+    // Teachers get a filtered dashboard showing only their students
+    if (isTeacher()) {
+        return $baseUrl . '?view=teacher';
+    }
+    
+    return $baseUrl;
+}
+
+/**
+ * Redirect user to appropriate dashboard based on role
+ * 
+ * @return void
+ */
+function redirectToDashboard() {
+    redirect(getDashboardUrl());
+}
+
+/**
+ * Get current user's teacher ID if they are a teacher
+ * 
+ * @return int|null Teacher's user ID or null if not a teacher
+ */
+function getTeacherId() {
+    if (!isTeacher()) {
+        return null;
+    }
+    
+    return $_SESSION['user_id'] ?? null;
 }
