@@ -8,6 +8,15 @@ if (!isset($GLOBALS['config'])) {
     require_once __DIR__ . '/../config/config.php';
 }
 
+// Load Composer autoloader for QR code library
+$autoloadPath = __DIR__ . '/../vendor/autoload.php';
+if (file_exists($autoloadPath)) {
+    require_once $autoloadPath;
+}
+
+use chillerlan\QRCode\QRCode;
+use chillerlan\QRCode\QROptions;
+
 /**
  * Generate QR Code SVG
  */
@@ -21,111 +30,184 @@ function generateQRCode($data, $filename) {
     $filename = preg_replace('/\.(png|svg)$/', '', $filename) . '.svg';
     $filepath = $storageDir . '/' . $filename;
     
-    // Generate QR code using simple PHP implementation
-    $qr = generateQRMatrix($data);
-    $svg = renderQRtoSVG($qr, $data);
+    // Check if chillerlan/php-qrcode is available
+    if (class_exists('chillerlan\QRCode\QRCode')) {
+        $options = new QROptions([
+            'outputType' => QRCode::OUTPUT_MARKUP_SVG,
+            'eccLevel' => QRCode::ECC_M,
+            'scale' => 8,
+            'addQuietzone' => true,
+            'quietzoneSize' => 2,
+        ]);
+        
+        $qrcode = new QRCode($options);
+        $svg = $qrcode->render($data);
+        
+        file_put_contents($filepath, $svg);
+    } else {
+        // Fallback to built-in implementation
+        $svg = generateQRCodeFallback($data);
+        file_put_contents($filepath, $svg);
+    }
     
-    file_put_contents($filepath, $svg);
     return 'storage/barcodes/' . $filename;
 }
 
 /**
- * Generate QR code matrix (simplified implementation)
+ * Fallback QR code generation (basic implementation)
  */
-function generateQRMatrix($data) {
-    // Use a simple numeric encoding for LRN (12 digits)
-    $size = 25; // QR code size
-    $matrix = array_fill(0, $size, array_fill(0, $size, 0));
+function generateQRCodeFallback($data) {
+    $qr = new QRCodeGenerator($data);
+    return $qr->toSVG();
+}
+
+/**
+ * Simple QR Code Generator class (fallback when library not available)
+ */
+class QRCodeGenerator {
+    private $data;
+    private $size = 21; // Version 1 QR code
+    private $matrix;
     
-    // Add finder patterns (corners)
-    addFinderPattern($matrix, 0, 0);
-    addFinderPattern($matrix, $size - 7, 0);
-    addFinderPattern($matrix, 0, $size - 7);
-    
-    // Add timing patterns
-    for ($i = 8; $i < $size - 8; $i++) {
-        $matrix[$i][6] = ($i % 2 == 0) ? 1 : 0;
-        $matrix[6][$i] = ($i % 2 == 0) ? 1 : 0;
+    public function __construct($data) {
+        $this->data = $data;
+        $this->matrix = array_fill(0, $this->size, array_fill(0, $this->size, 0));
+        $this->generate();
     }
     
-    // Encode data in remaining space
-    $binary = '';
-    for ($i = 0; $i < strlen($data); $i++) {
-        $binary .= str_pad(decbin(ord($data[$i])), 8, '0', STR_PAD_LEFT);
+    private function generate() {
+        // Add finder patterns
+        $this->addFinderPattern(0, 0);
+        $this->addFinderPattern($this->size - 7, 0);
+        $this->addFinderPattern(0, $this->size - 7);
+        
+        // Add separators
+        $this->addSeparators();
+        
+        // Add timing patterns
+        $this->addTimingPatterns();
+        
+        // Add dark module
+        $this->matrix[8][$this->size - 8] = 1;
+        
+        // Encode data
+        $this->encodeData();
     }
     
-    $pos = 0;
-    for ($y = $size - 1; $y >= 0; $y -= 2) {
-        if ($y == 6) $y = 5; // Skip timing pattern
-        for ($x = $size - 1; $x >= 0; $x--) {
-            for ($dx = 0; $dx <= 1; $dx++) {
-                $col = $y - $dx;
-                if ($col < 0) continue;
-                if (!isReserved($x, $col, $size)) {
-                    if ($pos < strlen($binary)) {
-                        $matrix[$x][$col] = $binary[$pos] == '1' ? 1 : 0;
-                        $pos++;
-                    }
+    private function addFinderPattern($row, $col) {
+        $pattern = [
+            [1,1,1,1,1,1,1],
+            [1,0,0,0,0,0,1],
+            [1,0,1,1,1,0,1],
+            [1,0,1,1,1,0,1],
+            [1,0,1,1,1,0,1],
+            [1,0,0,0,0,0,1],
+            [1,1,1,1,1,1,1]
+        ];
+        for ($r = 0; $r < 7; $r++) {
+            for ($c = 0; $c < 7; $c++) {
+                if ($row + $r < $this->size && $col + $c < $this->size) {
+                    $this->matrix[$row + $r][$col + $c] = $pattern[$r][$c];
                 }
             }
         }
     }
     
-    return $matrix;
-}
-
-function addFinderPattern(&$matrix, $x, $y) {
-    $pattern = [
-        [1,1,1,1,1,1,1],
-        [1,0,0,0,0,0,1],
-        [1,0,1,1,1,0,1],
-        [1,0,1,1,1,0,1],
-        [1,0,1,1,1,0,1],
-        [1,0,0,0,0,0,1],
-        [1,1,1,1,1,1,1]
-    ];
-    for ($i = 0; $i < 7; $i++) {
-        for ($j = 0; $j < 7; $j++) {
-            if (isset($matrix[$x + $i][$y + $j])) {
-                $matrix[$x + $i][$y + $j] = $pattern[$i][$j];
+    private function addSeparators() {
+        // Top-left
+        for ($i = 0; $i < 8; $i++) {
+            if ($i < $this->size) {
+                $this->matrix[7][$i] = 0;
+                $this->matrix[$i][7] = 0;
             }
         }
-    }
-}
-
-function isReserved($x, $y, $size) {
-    // Finder patterns
-    if ($x < 8 && $y < 8) return true;
-    if ($x < 8 && $y >= $size - 8) return true;
-    if ($x >= $size - 8 && $y < 8) return true;
-    // Timing patterns
-    if ($x == 6 || $y == 6) return true;
-    return false;
-}
-
-function renderQRtoSVG($matrix, $data) {
-    $size = count($matrix);
-    $cellSize = 8;
-    $padding = 20;
-    $width = $size * $cellSize + $padding * 2;
-    $height = $width;
-    
-    $svg = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
-    $svg .= '<svg xmlns="http://www.w3.org/2000/svg" width="' . $width . '" height="' . $height . '" viewBox="0 0 ' . $width . ' ' . $height . '">' . "\n";
-    $svg .= '<rect width="100%" height="100%" fill="white"/>' . "\n";
-    
-    for ($y = 0; $y < $size; $y++) {
-        for ($x = 0; $x < $size; $x++) {
-            if ($matrix[$y][$x] == 1) {
-                $px = $padding + $x * $cellSize;
-                $py = $padding + $y * $cellSize;
-                $svg .= '<rect x="' . $px . '" y="' . $py . '" width="' . $cellSize . '" height="' . $cellSize . '" fill="black"/>' . "\n";
+        // Top-right
+        for ($i = 0; $i < 8; $i++) {
+            if ($this->size - 8 + $i < $this->size) {
+                $this->matrix[7][$this->size - 8 + $i] = 0;
+            }
+            $this->matrix[$i][$this->size - 8] = 0;
+        }
+        // Bottom-left
+        for ($i = 0; $i < 8; $i++) {
+            $this->matrix[$this->size - 8][$i] = 0;
+            if ($this->size - 8 + $i < $this->size) {
+                $this->matrix[$this->size - 8 + $i][7] = 0;
             }
         }
     }
     
-    $svg .= '</svg>';
-    return $svg;
+    private function addTimingPatterns() {
+        for ($i = 8; $i < $this->size - 8; $i++) {
+            $val = ($i % 2 == 0) ? 1 : 0;
+            $this->matrix[6][$i] = $val;
+            $this->matrix[$i][6] = $val;
+        }
+    }
+    
+    private function encodeData() {
+        $binary = '';
+        for ($i = 0; $i < strlen($this->data); $i++) {
+            $binary .= str_pad(decbin(ord($this->data[$i])), 8, '0', STR_PAD_LEFT);
+        }
+        
+        $pos = 0;
+        $upward = true;
+        
+        for ($col = $this->size - 1; $col >= 0; $col -= 2) {
+            if ($col == 6) $col = 5;
+            
+            $rows = $upward ? range($this->size - 1, 0, -1) : range(0, $this->size - 1);
+            
+            foreach ($rows as $row) {
+                for ($c = 0; $c < 2; $c++) {
+                    $currentCol = $col - $c;
+                    if ($currentCol < 0) continue;
+                    
+                    if (!$this->isReserved($row, $currentCol)) {
+                        if ($pos < strlen($binary)) {
+                            $this->matrix[$row][$currentCol] = ($binary[$pos] == '1') ? 1 : 0;
+                            $pos++;
+                        }
+                    }
+                }
+            }
+            $upward = !$upward;
+        }
+    }
+    
+    private function isReserved($row, $col) {
+        // Finder patterns + separators
+        if ($row < 9 && $col < 9) return true;
+        if ($row < 9 && $col >= $this->size - 8) return true;
+        if ($row >= $this->size - 8 && $col < 9) return true;
+        // Timing patterns
+        if ($row == 6 || $col == 6) return true;
+        return false;
+    }
+    
+    public function toSVG() {
+        $cellSize = 8;
+        $padding = 20;
+        $width = $this->size * $cellSize + $padding * 2;
+        
+        $svg = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+        $svg .= '<svg xmlns="http://www.w3.org/2000/svg" width="' . $width . '" height="' . $width . '" viewBox="0 0 ' . $width . ' ' . $width . '">' . "\n";
+        $svg .= '<rect width="100%" height="100%" fill="white"/>' . "\n";
+        
+        for ($row = 0; $row < $this->size; $row++) {
+            for ($col = 0; $col < $this->size; $col++) {
+                if ($this->matrix[$row][$col] == 1) {
+                    $x = $padding + $col * $cellSize;
+                    $y = $padding + $row * $cellSize;
+                    $svg .= '<rect x="' . $x . '" y="' . $y . '" width="' . $cellSize . '" height="' . $cellSize . '" fill="black"/>' . "\n";
+                }
+            }
+        }
+        
+        $svg .= '</svg>';
+        return $svg;
+    }
 }
 
 /**
@@ -286,11 +368,11 @@ function generateBarcode($data, $filename) {
 }
 
 /**
- * Generate barcode for student using LRN
+ * Generate QR code for student using LRN
  */
 function generateStudentBarcode($studentId) {
     $filename = 'student_' . preg_replace('/[^a-zA-Z0-9_-]/', '_', $studentId) . '.svg';
-    return generateBarcode($studentId, $filename);
+    return generateQRCode($studentId, $filename);
 }
 
 /**

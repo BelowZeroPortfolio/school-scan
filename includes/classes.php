@@ -170,10 +170,16 @@ function getClassById(int $classId): ?array
  * 
  * Requirements: 4.1, 4.2
  */
-function assignStudentToClass(int $studentId, int $classId, ?int $enrolledBy = null): int|false
+function assignStudentToClass(int $studentId, int $classId, ?int $enrolledBy = null, string $enrollmentType = 'regular'): int|false
 {
     if ($studentId <= 0 || $classId <= 0) {
         return false;
+    }
+    
+    // Validate enrollment type
+    $validTypes = ['regular', 'transferee', 'returnee', 'repeater'];
+    if (!in_array($enrollmentType, $validTypes)) {
+        $enrollmentType = 'regular';
     }
     
     // Verify student exists
@@ -209,15 +215,15 @@ function assignStudentToClass(int $studentId, int $classId, ?int $enrolledBy = n
         
         if ($inactiveEnrollment) {
             // Re-activate the existing enrollment
-            $updateSql = "UPDATE student_classes SET is_active = 1, enrolled_by = ?, enrolled_at = CURRENT_TIMESTAMP WHERE id = ?";
-            $affected = dbExecute($updateSql, [$enrolledBy, $inactiveEnrollment['id']]);
+            $updateSql = "UPDATE student_classes SET is_active = 1, enrolled_by = ?, enrolled_at = CURRENT_TIMESTAMP, enrollment_type = ?, enrollment_status = 'active' WHERE id = ?";
+            $affected = dbExecute($updateSql, [$enrolledBy, $enrollmentType, $inactiveEnrollment['id']]);
             return $affected > 0 ? $inactiveEnrollment['id'] : false;
         }
         
-        // Create new enrollment
-        $sql = "INSERT INTO student_classes (student_id, class_id, enrolled_by, is_active) 
-                VALUES (?, ?, ?, 1)";
-        return dbInsert($sql, [$studentId, $classId, $enrolledBy]);
+        // Create new enrollment with enrollment_type
+        $sql = "INSERT INTO student_classes (student_id, class_id, enrolled_by, is_active, enrollment_type, enrollment_status) 
+                VALUES (?, ?, ?, 1, ?, 'active')";
+        return dbInsert($sql, [$studentId, $classId, $enrolledBy, $enrollmentType]);
     } catch (PDOException $e) {
         if (function_exists('logError')) {
             logError('Failed to assign student to class: ' . $e->getMessage());
@@ -715,4 +721,250 @@ function getStudentCurrentClassInfo(int $studentId, ?int $schoolYearId = null): 
         ];
     }
     return null;
+}
+
+/**
+ * Update enrollment status (withdraw, drop, transfer out, etc.)
+ * 
+ * @param int $studentId Student ID
+ * @param int $classId Class ID
+ * @param string $status New status (withdrawn, dropped, transferred_out, completed)
+ * @param int|null $changedBy User ID who made the change
+ * @param string|null $reason Reason for status change
+ * @return array Result with success status and message
+ */
+function updateEnrollmentStatus(int $studentId, int $classId, string $status, ?int $changedBy = null, ?string $reason = null): array
+{
+    $result = ['success' => false, 'message' => ''];
+    
+    $validStatuses = ['active', 'withdrawn', 'dropped', 'transferred_out', 'completed'];
+    if (!in_array($status, $validStatuses)) {
+        $result['message'] = 'Invalid enrollment status';
+        return $result;
+    }
+    
+    // Get current enrollment
+    $sql = "SELECT id, enrollment_status FROM student_classes WHERE student_id = ? AND class_id = ? AND is_active = 1";
+    $enrollment = dbFetchOne($sql, [$studentId, $classId]);
+    
+    if (!$enrollment) {
+        $result['message'] = 'Enrollment not found';
+        return $result;
+    }
+    
+    try {
+        $updateSql = "UPDATE student_classes 
+                      SET enrollment_status = ?, 
+                          status_changed_at = NOW(), 
+                          status_changed_by = ?,
+                          status_reason = ?,
+                          is_active = ?
+                      WHERE id = ?";
+        
+        // If status is not 'active', mark enrollment as inactive
+        $isActive = ($status === 'active') ? 1 : 0;
+        
+        dbExecute($updateSql, [$status, $changedBy, $reason, $isActive, $enrollment['id']]);
+        
+        $result['success'] = true;
+        $result['message'] = 'Enrollment status updated successfully';
+        
+        if (function_exists('logInfo')) {
+            logInfo('Enrollment status updated', [
+                'student_id' => $studentId,
+                'class_id' => $classId,
+                'old_status' => $enrollment['enrollment_status'],
+                'new_status' => $status,
+                'reason' => $reason,
+                'changed_by' => $changedBy
+            ]);
+        }
+    } catch (PDOException $e) {
+        $result['message'] = 'Failed to update enrollment status';
+        if (function_exists('logError')) {
+            logError('Failed to update enrollment status: ' . $e->getMessage());
+        }
+    }
+    
+    return $result;
+}
+
+/**
+ * Transfer student to another class within the same school year
+ * 
+ * @param int $studentId Student ID
+ * @param int $fromClassId Current class ID
+ * @param int $toClassId New class ID
+ * @param int|null $transferredBy User ID who made the transfer
+ * @param string|null $reason Reason for transfer
+ * @return array Result with success status and message
+ */
+function transferStudentToClass(int $studentId, int $fromClassId, int $toClassId, ?int $transferredBy = null, ?string $reason = null): array
+{
+    $result = ['success' => false, 'message' => ''];
+    
+    if ($fromClassId === $toClassId) {
+        $result['message'] = 'Cannot transfer to the same class';
+        return $result;
+    }
+    
+    // Verify both classes are in the same school year
+    $fromClass = getClassById($fromClassId);
+    $toClass = getClassById($toClassId);
+    
+    if (!$fromClass || !$toClass) {
+        $result['message'] = 'Class not found';
+        return $result;
+    }
+    
+    if ($fromClass['school_year_id'] !== $toClass['school_year_id']) {
+        $result['message'] = 'Cannot transfer between different school years. Use student placement instead.';
+        return $result;
+    }
+    
+    try {
+        dbBeginTransaction();
+        
+        // Mark old enrollment as transferred_out
+        $updateResult = updateEnrollmentStatus($studentId, $fromClassId, 'transferred_out', $transferredBy, $reason ?? 'Transferred to ' . $toClass['grade_level'] . ' - ' . $toClass['section']);
+        
+        if (!$updateResult['success']) {
+            dbRollback();
+            return $updateResult;
+        }
+        
+        // Create new enrollment
+        $enrollResult = assignStudentToClass($studentId, $toClassId, $transferredBy, 'regular');
+        
+        if (!$enrollResult) {
+            dbRollback();
+            $result['message'] = 'Failed to enroll in new class';
+            return $result;
+        }
+        
+        dbCommit();
+        
+        $result['success'] = true;
+        $result['message'] = 'Student transferred successfully';
+        
+        if (function_exists('logInfo')) {
+            logInfo('Student transferred between classes', [
+                'student_id' => $studentId,
+                'from_class' => $fromClass['grade_level'] . ' - ' . $fromClass['section'],
+                'to_class' => $toClass['grade_level'] . ' - ' . $toClass['section'],
+                'transferred_by' => $transferredBy
+            ]);
+        }
+    } catch (Exception $e) {
+        dbRollback();
+        $result['message'] = 'Transfer failed: ' . $e->getMessage();
+        if (function_exists('logError')) {
+            logError('Student transfer failed: ' . $e->getMessage());
+        }
+    }
+    
+    return $result;
+}
+
+/**
+ * Get enrollment details including type and status
+ * 
+ * @param int $studentId Student ID
+ * @param int|null $schoolYearId School year ID (null for active year)
+ * @return array|null Enrollment details or null
+ */
+function getStudentEnrollmentDetails(int $studentId, ?int $schoolYearId = null): ?array
+{
+    if ($schoolYearId === null) {
+        $activeYear = getActiveSchoolYear();
+        $schoolYearId = $activeYear ? $activeYear['id'] : null;
+    }
+    
+    if (!$schoolYearId) {
+        return null;
+    }
+    
+    $sql = "SELECT sc.*, c.grade_level, c.section, c.school_year_id,
+                   sy.name AS school_year_name,
+                   u.full_name AS enrolled_by_name,
+                   u2.full_name AS status_changed_by_name
+            FROM student_classes sc
+            JOIN classes c ON sc.class_id = c.id
+            JOIN school_years sy ON c.school_year_id = sy.id
+            LEFT JOIN users u ON sc.enrolled_by = u.id
+            LEFT JOIN users u2 ON sc.status_changed_by = u2.id
+            WHERE sc.student_id = ? AND c.school_year_id = ?
+            ORDER BY sc.enrolled_at DESC
+            LIMIT 1";
+    
+    return dbFetchOne($sql, [$studentId, $schoolYearId]);
+}
+
+/**
+ * Get students by enrollment type for a school year
+ * 
+ * @param int $schoolYearId School year ID
+ * @param string $enrollmentType Enrollment type filter
+ * @return array List of students
+ */
+function getStudentsByEnrollmentType(int $schoolYearId, string $enrollmentType): array
+{
+    $sql = "SELECT s.*, sc.enrollment_type, sc.enrollment_status, sc.enrolled_at,
+                   c.grade_level, c.section
+            FROM students s
+            JOIN student_classes sc ON s.id = sc.student_id
+            JOIN classes c ON sc.class_id = c.id
+            WHERE c.school_year_id = ? AND sc.enrollment_type = ? AND sc.is_active = 1
+            ORDER BY c.grade_level, c.section, s.last_name, s.first_name";
+    
+    return dbFetchAll($sql, [$schoolYearId, $enrollmentType]);
+}
+
+/**
+ * Get enrollment statistics for a school year
+ * 
+ * @param int $schoolYearId School year ID
+ * @return array Statistics array
+ */
+function getEnrollmentStatistics(int $schoolYearId): array
+{
+    $stats = [
+        'total_enrolled' => 0,
+        'regular' => 0,
+        'transferee' => 0,
+        'returnee' => 0,
+        'repeater' => 0,
+        'withdrawn' => 0,
+        'dropped' => 0,
+        'transferred_out' => 0
+    ];
+    
+    // Count by enrollment type (active only)
+    $typeSql = "SELECT sc.enrollment_type, COUNT(*) as count
+                FROM student_classes sc
+                JOIN classes c ON sc.class_id = c.id
+                WHERE c.school_year_id = ? AND sc.is_active = 1
+                GROUP BY sc.enrollment_type";
+    
+    $typeResults = dbFetchAll($typeSql, [$schoolYearId]);
+    foreach ($typeResults as $row) {
+        $stats[$row['enrollment_type']] = (int)$row['count'];
+        $stats['total_enrolled'] += (int)$row['count'];
+    }
+    
+    // Count by status (inactive enrollments)
+    $statusSql = "SELECT sc.enrollment_status, COUNT(*) as count
+                  FROM student_classes sc
+                  JOIN classes c ON sc.class_id = c.id
+                  WHERE c.school_year_id = ? AND sc.is_active = 0
+                  GROUP BY sc.enrollment_status";
+    
+    $statusResults = dbFetchAll($statusSql, [$schoolYearId]);
+    foreach ($statusResults as $row) {
+        if (isset($stats[$row['enrollment_status']])) {
+            $stats[$row['enrollment_status']] = (int)$row['count'];
+        }
+    }
+    
+    return $stats;
 }

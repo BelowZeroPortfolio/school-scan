@@ -1,21 +1,22 @@
 <?php
 /**
- * Public Barcode Scanning Page
- * Students can scan their barcodes without authentication
+ * Barcode Scanning Page
+ * Teachers/Operators scan student barcodes for attendance
+ * Requires authentication (teacher, operator, or admin role)
  */
 
 require_once __DIR__ . '/config/config.php';
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/csrf.php';
 require_once __DIR__ . '/includes/notifications.php';
 require_once __DIR__ . '/includes/attendance.php';
 
-// Start session for CSRF
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+// Require authentication - teachers, operators, or admins can scan
+requireAnyRole(['admin', 'operator', 'teacher']);
 
+$currentUser = getCurrentUser();
 $scanResult = null;
 
 // Get scan mode from URL parameter (arrival or dismissal)
@@ -75,7 +76,7 @@ $currentMode = $modeConfig[$scanMode];
     <title>Scan Attendance - <?php echo e(config('app_name')); ?></title>
     
     <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="<?php echo config('app_url'); ?>/assets/images/icon.svg">
+    <link rel="icon" type="image/png" href="<?php echo config('app_url'); ?>/assets/images/lex.png">
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
@@ -140,8 +141,8 @@ $currentMode = $modeConfig[$scanMode];
                                 <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
                             </svg>
                         </button>
-                        <a href="<?php echo config('app_url'); ?>/" class="text-sm font-medium theme-text-secondary hover:text-violet-600 dark-mode:hover:text-violet-400 px-4 py-2 rounded-lg hover:bg-gray-50 dark-mode:hover:bg-gray-700 transition-colors">
-                            ← Back to Home
+                        <a href="<?php echo config('app_url'); ?>/pages/dashboard.php" class="text-sm font-medium theme-text-secondary hover:text-violet-600 dark-mode:hover:text-violet-400 px-4 py-2 rounded-lg hover:bg-gray-50 dark-mode:hover:bg-gray-700 transition-colors">
+                            ← Back to Dashboard
                         </a>
                     </div>
                 </div>

@@ -12,7 +12,7 @@ return [
     'db_charset' => 'utf8mb4',
     
     // Application Settings
-    'app_name' => 'Barcode Attendance System',
+    'app_name' => 'Lexite Attendance System',
     'app_url' => getenv('APP_URL') ?: 'https://attendance.example.com',
     'app_env' => 'production',
     'debug' => false,

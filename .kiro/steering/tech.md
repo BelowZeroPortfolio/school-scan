@@ -7,14 +7,12 @@
 
 ## Frontend
 - Tailwind CSS (via CDN or compiled)
-- Alpine.js for interactivity
 - Chart.js for dashboard visualizations
 - QuaggaJS for camera-based barcode scanning
 
 ## Key Libraries (Composer)
 - `picqer/php-barcode-generator` - Barcode generation
 - `phpmailer/phpmailer` - Email notifications
-- `twilio/sdk` - SMS notifications
 - `tecnickcom/tcpdf` - PDF exports
 - `phpoffice/phpspreadsheet` - Excel exports
 

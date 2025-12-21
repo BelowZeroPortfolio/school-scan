@@ -44,13 +44,13 @@ function validateSchoolYearFormat(string $name): bool
 /**
  * Get all school years
  * 
- * @return array List of school years with id, name, is_active, start_date, end_date, created_at
+ * @return array List of school years with id, name, is_active, is_locked, start_date, end_date, created_at
  * 
  * Requirements: 1.1
  */
 function getAllSchoolYears(): array
 {
-    $sql = "SELECT id, name, is_active, start_date, end_date, created_at, updated_at 
+    $sql = "SELECT id, name, is_active, is_locked, start_date, end_date, created_at, updated_at 
             FROM school_years 
             ORDER BY name DESC";
     
@@ -66,7 +66,7 @@ function getAllSchoolYears(): array
  */
 function getActiveSchoolYear(): ?array
 {
-    $sql = "SELECT id, name, is_active, start_date, end_date, created_at, updated_at 
+    $sql = "SELECT id, name, is_active, is_locked, start_date, end_date, created_at, updated_at 
             FROM school_years 
             WHERE is_active = 1 
             LIMIT 1";
@@ -154,7 +154,7 @@ function setActiveSchoolYear(int $schoolYearId): bool
  */
 function getSchoolYearById(int $schoolYearId): ?array
 {
-    $sql = "SELECT id, name, is_active, start_date, end_date, created_at, updated_at 
+    $sql = "SELECT id, name, is_active, is_locked, start_date, end_date, created_at, updated_at 
             FROM school_years 
             WHERE id = ?";
     

@@ -12,7 +12,7 @@ return [
     'db_charset' => 'utf8mb4',
     
     // Application Settings
-    'app_name' => 'Barcode Attendance System',
+    'app_name' => 'Lexite Attendance System',
     'app_url' => 'http://localhost/attendance-system',
     'app_env' => 'development',
     'debug' => true,

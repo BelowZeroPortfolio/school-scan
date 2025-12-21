@@ -10,19 +10,36 @@ if (file_exists($autoloadPath)) {
     require_once $autoloadPath;
 }
 
+// Load .env file if exists
+$envFile = __DIR__ . '/../.env';
+if (file_exists($envFile)) {
+    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        if (strpos(trim($line), '#') === 0) continue;
+        if (strpos($line, '=') !== false) {
+            list($name, $value) = explode('=', $line, 2);
+            $name = trim($name);
+            $value = trim($value);
+            if (!getenv($name)) {
+                putenv("$name=$value");
+            }
+        }
+    }
+}
+
 // Configuration array
 $config = [
     // Database Configuration
-    'db_host' => 'localhost',
-    'db_name' => 'school',
-    'db_user' => 'root',
-    'db_pass' => '',
+    'db_host' => getenv('DB_HOST') ?: 'localhost',
+    'db_name' => getenv('DB_NAME') ?: 'school',
+    'db_user' => getenv('DB_USER') ?: 'root',
+    'db_pass' => getenv('DB_PASS') ?: '',
     'db_charset' => 'utf8mb4',
     
     // Application Settings
-    'app_name' => 'Barcode Attendance System',
-    'app_url' => 'http://localhost/school-scan',
-    'app_env' => 'development',
+    'app_name' => 'Lexite Attendance System',
+    'app_url' => getenv('APP_URL') ?: 'http://localhost/school-scan',
+    'app_env' => getenv('APP_ENV') ?: 'development',
     'debug' => true,
     'school_name' => 'Your School Name', // Update this with your school name
     
@@ -37,7 +54,7 @@ $config = [
     'upload_max_size' => 5242880, // 5MB in bytes
     
     // SMS Mobile API Settings
-    'smsmobileapi_key' => '7c56b6caf31371598f7267012bf0d85378654f19b8e65edf',
+    'smsmobileapi_key' => getenv('SMSMOBILEAPI_KEY') ?: '',
     
     // Retry Settings
     'retry' => [
@@ -56,8 +73,8 @@ $config = [
     'display_datetime_format' => 'M d, Y h:i A',
     
     // reCAPTCHA Settings
-    'recaptcha_site_key' => '6LfS7icsAAAAAJqNSS0TWy-RPDkF1H38NZuooxmz',
-    'recaptcha_secret_key' => '6LfS7icsAAAAAN4D741KC8_tZrlzjkc7ygiZa5eA',
+    'recaptcha_site_key' => getenv('RECAPTCHA_SITE_KEY') ?: '',
+    'recaptcha_secret_key' => getenv('RECAPTCHA_SECRET_KEY') ?: '',
 ];
 
 // Make config globally accessible

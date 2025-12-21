@@ -22,8 +22,10 @@ function findStudentByBarcode($barcode) {
     try {
         // Search by LRN first (primary), then fall back to student_id for backwards compatibility
         // Join with student_classes and classes to get current class info
+        // Include sms_enabled for notification check
         $sql = "SELECT s.id, s.student_id, s.lrn, s.first_name, s.last_name,
                        s.parent_name, s.parent_phone, s.parent_email, s.is_active,
+                       s.sms_enabled,
                        c.grade_level AS class, c.section
                 FROM students s
                 LEFT JOIN student_classes sc ON s.id = sc.student_id AND sc.is_active = 1

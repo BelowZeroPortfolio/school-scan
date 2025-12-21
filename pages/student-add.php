@@ -64,12 +64,20 @@ if (isPost()) {
         'first_name' => sanitizeString($_POST['first_name'] ?? ''),
         'last_name' => sanitizeString($_POST['last_name'] ?? ''),
         'class_id' => isset($_POST['class_id']) && $_POST['class_id'] !== '' ? (int)$_POST['class_id'] : null,
+        'enrollment_type' => sanitizeString($_POST['enrollment_type'] ?? 'regular'),
+        'previous_school' => sanitizeString($_POST['previous_school'] ?? ''),
         'parent_name' => sanitizeString($_POST['parent_name'] ?? ''),
         'parent_phone' => $rawPhone,
         'parent_email' => sanitizeEmail($_POST['parent_email'] ?? ''),
         'address' => sanitizeString($_POST['address'] ?? ''),
         'date_of_birth' => sanitizeString($_POST['date_of_birth'] ?? ''),
     ];
+    
+    // Validate enrollment type
+    $validEnrollmentTypes = ['regular', 'transferee', 'returnee', 'repeater'];
+    if (!in_array($formData['enrollment_type'], $validEnrollmentTypes)) {
+        $formData['enrollment_type'] = 'regular';
+    }
 
     // Validate required fields
     $required = ['lrn', 'first_name', 'last_name', 'parent_name', 'parent_phone', 'address'];
@@ -122,8 +130,8 @@ if (isPost()) {
             $sql = "INSERT INTO students (
                         student_id, lrn, first_name, last_name,
                         barcode_path, parent_name, parent_phone, parent_email,
-                        address, date_of_birth, is_active
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)";
+                        address, date_of_birth, is_active, previous_school
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)";
             
             $params = [
                 $studentCode,
@@ -136,19 +144,21 @@ if (isPost()) {
                 $formData['parent_email'],
                 $formData['address'],
                 $formData['date_of_birth'] ?: null,
+                $formData['previous_school'] ?: null,
             ];
             
             $studentId = dbInsert($sql, $params);
             
-            // Auto-enroll student in selected class (Requirements: 6.2)
+            // Auto-enroll student in selected class with enrollment type (Requirements: 6.2)
             if ($formData['class_id'] && $studentId) {
-                $enrollResult = assignStudentToClass($studentId, $formData['class_id'], $userId);
+                $enrollResult = assignStudentToClass($studentId, $formData['class_id'], $userId, $formData['enrollment_type']);
                 if (!$enrollResult) {
                     // Log warning but don't fail - student was created
                     if (function_exists('logWarning')) {
                         logWarning('Failed to auto-enroll student in class', [
                             'student_id' => $studentId,
-                            'class_id' => $formData['class_id']
+                            'class_id' => $formData['class_id'],
+                            'enrollment_type' => $formData['enrollment_type']
                         ]);
                     }
                 }
@@ -294,6 +304,34 @@ $currentUser = getCurrentUser();
                                 <?php endif; ?>
                             </p>
                         </div>
+                        
+                        <!-- Enrollment Type -->
+                        <div>
+                            <label for="enrollment_type" class="block text-sm font-medium text-gray-700 mb-1">
+                                Enrollment Type <span class="text-red-500">*</span>
+                            </label>
+                            <select name="enrollment_type" id="enrollment_type" required
+                                class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500"
+                                onchange="togglePreviousSchool(this.value)">
+                                <option value="regular" <?php echo ($formData['enrollment_type'] ?? 'regular') === 'regular' ? 'selected' : ''; ?>>Regular (New Enrollee)</option>
+                                <option value="transferee" <?php echo ($formData['enrollment_type'] ?? '') === 'transferee' ? 'selected' : ''; ?>>Transferee</option>
+                                <option value="returnee" <?php echo ($formData['enrollment_type'] ?? '') === 'returnee' ? 'selected' : ''; ?>>Returnee</option>
+                                <option value="repeater" <?php echo ($formData['enrollment_type'] ?? '') === 'repeater' ? 'selected' : ''; ?>>Repeater</option>
+                            </select>
+                            <p class="mt-1 text-xs text-gray-500">Select how this student is being enrolled</p>
+                        </div>
+                        
+                        <!-- Previous School (for transferees) -->
+                        <div id="previousSchoolField" style="<?php echo ($formData['enrollment_type'] ?? '') === 'transferee' ? '' : 'display: none;'; ?>">
+                            <label for="previous_school" class="block text-sm font-medium text-gray-700 mb-1">
+                                Previous School
+                            </label>
+                            <input type="text" name="previous_school" id="previous_school"
+                                value="<?php echo e($formData['previous_school'] ?? ''); ?>"
+                                class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500"
+                                placeholder="Name of previous school">
+                            <p class="mt-1 text-xs text-gray-500">Enter the school the student transferred from</p>
+                        </div>
                         <?php elseif (!$activeSchoolYear): ?>
                         <div class="sm:col-span-2">
                             <div class="rounded-lg bg-amber-50 border border-amber-200 p-3">
@@ -318,6 +356,14 @@ $currentUser = getCurrentUser();
                         </div>
                         <?php endif; ?>
                     </div>
+<script>
+function togglePreviousSchool(value) {
+    const field = document.getElementById('previousSchoolField');
+    if (field) {
+        field.style.display = value === 'transferee' ? '' : 'none';
+    }
+}
+</script>
                 </div>
 
                 <div>

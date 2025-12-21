@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Dec 19, 2025 at 07:06 AM
+-- Generation Time: Dec 21, 2025 at 12:30 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -39,14 +39,6 @@ CREATE TABLE `attendance` (
   `notes` text DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
---
--- Dumping data for table `attendance`
---
-
-INSERT INTO `attendance` (`id`, `student_id`, `school_year_id`, `attendance_date`, `check_in_time`, `check_out_time`, `status`, `recorded_by`, `notes`) VALUES
-(3, 8, NULL, '2025-12-08', '2025-12-08 13:24:58', NULL, 'present', NULL, NULL),
-(16, 8, NULL, '2025-12-11', '2025-12-11 04:10:36', NULL, 'present', NULL, NULL);
-
 -- --------------------------------------------------------
 
 --
@@ -60,6 +52,7 @@ CREATE TABLE `classes` (
   `teacher_id` int(11) NOT NULL,
   `school_year_id` int(11) NOT NULL,
   `is_active` tinyint(1) DEFAULT 1,
+  `max_capacity` int(11) DEFAULT 50 COMMENT 'Maximum students allowed in class',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -68,8 +61,9 @@ CREATE TABLE `classes` (
 -- Dumping data for table `classes`
 --
 
-INSERT INTO `classes` (`id`, `grade_level`, `section`, `teacher_id`, `school_year_id`, `is_active`, `created_at`, `updated_at`) VALUES
-(1, 'Grade 7', 'Example', 4, 1, 1, '2025-12-16 13:38:43', '2025-12-16 13:38:43');
+INSERT INTO `classes` (`id`, `grade_level`, `section`, `teacher_id`, `school_year_id`, `is_active`, `max_capacity`, `created_at`, `updated_at`) VALUES
+(3, 'Grade 7', 'A', 4, 1, 1, 50, '2025-12-19 07:11:39', '2025-12-19 07:11:39'),
+(4, 'Grade 8', 'A', 5, 2, 1, 50, '2025-12-19 07:13:15', '2025-12-19 07:13:15');
 
 -- --------------------------------------------------------
 
@@ -89,14 +83,6 @@ CREATE TABLE `notification_logs` (
   `retry_count` int(11) DEFAULT 0,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
---
--- Dumping data for table `notification_logs`
---
-
-INSERT INTO `notification_logs` (`id`, `student_id`, `notification_type`, `recipient`, `message`, `status`, `sent_at`, `error_message`, `retry_count`, `created_at`) VALUES
-(1, 8, 'sms', '+639319120634', 'Hello Carly Cata-an, your child Carl Navid Cata-an arrived at school on Dec 11, 2025 05:01 AM. - Your School Name', 'sent', '2025-12-10 21:01:10', NULL, 0, '2025-12-11 04:01:10'),
-(2, 8, 'sms', '+639319120634', 'Hello Carly Cata-an, your child Carl Navid Cata-an arrived at school on Dec 11, 2025 12:10 PM. - Your School Name', 'sent', '2025-12-10 21:10:40', NULL, 0, '2025-12-11 04:10:40');
 
 -- --------------------------------------------------------
 
@@ -127,6 +113,7 @@ CREATE TABLE `school_years` (
   `id` int(11) NOT NULL,
   `name` varchar(9) NOT NULL COMMENT 'Format: YYYY-YYYY',
   `is_active` tinyint(1) DEFAULT 0,
+  `is_locked` tinyint(1) DEFAULT 0 COMMENT 'Prevents enrollment changes when locked',
   `start_date` date DEFAULT NULL,
   `end_date` date DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
@@ -137,10 +124,11 @@ CREATE TABLE `school_years` (
 -- Dumping data for table `school_years`
 --
 
-INSERT INTO `school_years` (`id`, `name`, `is_active`, `start_date`, `end_date`, `created_at`, `updated_at`) VALUES
-(1, '2024-2025', 1, '2025-01-01', '2025-12-31', '2025-12-16 12:56:40', '2025-12-16 12:56:43'),
-(2, '2025-2026', 0, '2025-12-02', '2025-12-25', '2025-12-16 12:57:08', '2025-12-16 12:57:08'),
-(3, '2026-2027', 0, '2025-12-08', '2025-12-18', '2025-12-16 14:19:43', '2025-12-16 14:19:43');
+INSERT INTO `school_years` (`id`, `name`, `is_active`, `is_locked`, `start_date`, `end_date`, `created_at`, `updated_at`) VALUES
+(1, '2024-2025', 0, 0, '2025-01-01', '2025-12-31', '2025-12-16 12:56:40', '2025-12-21 08:35:10'),
+(2, '2025-2026', 1, 0, '2025-12-02', '2025-12-25', '2025-12-16 12:57:08', '2025-12-21 09:13:59'),
+(3, '2026-2027', 0, 0, '2025-12-08', '2025-12-18', '2025-12-16 14:19:43', '2025-12-16 14:19:43'),
+(4, '2027-2028', 0, 0, '2027-01-01', '2027-12-31', '2025-12-21 09:10:45', '2025-12-21 09:10:45');
 
 -- --------------------------------------------------------
 
@@ -163,9 +151,10 @@ CREATE TABLE `sessions` (
 
 INSERT INTO `sessions` (`id`, `user_id`, `ip_address`, `user_agent`, `last_activity`, `created_at`) VALUES
 ('107ughcd5t4oebf5vhl22mf36f', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-16 14:45:10', '2025-12-16 14:45:10'),
+('84tr4mdd0amds2bjrsh2a31cjg', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-19 07:31:33', '2025-12-19 07:31:33'),
+('dnqpfrck34kb9aa15l32ks4ka2', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-21 09:58:20', '2025-12-21 09:58:20'),
 ('ed1j9i2j85p2qo703dp3e5o634', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-08 13:26:13', '2025-12-08 13:26:13'),
-('mdf618aj1ikfgda3gqkk5tivb1', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-19 06:00:35', '2025-12-19 06:00:35'),
-('u07erlfggvikmdrmk4ta1v7bq0', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-19 06:00:58', '2025-12-19 06:00:58');
+('mdf618aj1ikfgda3gqkk5tivb1', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-19 06:00:35', '2025-12-19 06:00:35');
 
 -- --------------------------------------------------------
 
@@ -173,7 +162,6 @@ INSERT INTO `sessions` (`id`, `user_id`, `ip_address`, `user_agent`, `last_activ
 -- Table structure for table `students`
 --
 
--- Note: class and section columns removed - now managed via student_classes -> classes relationship
 CREATE TABLE `students` (
   `id` int(11) NOT NULL,
   `student_id` varchar(20) NOT NULL,
@@ -188,22 +176,18 @@ CREATE TABLE `students` (
   `date_of_birth` date DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `is_active` tinyint(1) DEFAULT 1
+  `is_active` tinyint(1) DEFAULT 1,
+  `sms_enabled` tinyint(1) DEFAULT 0 COMMENT 'Whether SMS notifications are enabled for this student (paid subscription)',
+  `previous_school` varchar(255) DEFAULT NULL COMMENT 'Previous school name for transferees'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Dumping data for table `students`
 --
 
-INSERT INTO `students` (`id`, `student_id`, `lrn`, `first_name`, `last_name`, `barcode_path`, `parent_name`, `parent_phone`, `parent_email`, `address`, `date_of_birth`, `created_at`, `updated_at`, `is_active`) VALUES
-(1, 'STU001', NULL, 'John', 'Doe', NULL, 'Jane Doe', '+1234567890', 'jane.doe@example.com', NULL, NULL, '2025-12-06 08:04:25', '2025-12-06 08:04:25', 1),
-(2, 'STU002', NULL, 'Alice', 'Smith', NULL, 'Bob Smith', '+1234567891', 'bob.smith@example.com', NULL, NULL, '2025-12-06 08:04:25', '2025-12-06 08:04:25', 1),
-(3, 'STU003', NULL, 'Michael', 'Johnson', NULL, 'Sarah Johnson', '+1234567892', 'sarah.johnson@example.com', NULL, NULL, '2025-12-06 08:04:25', '2025-12-06 08:04:25', 1),
-(4, 'STU004', NULL, 'Emily', 'Brown', NULL, 'David Brown', '+1234567893', 'david.brown@example.com', NULL, NULL, '2025-12-06 08:04:25', '2025-12-06 08:04:25', 1),
-(5, 'STU005', NULL, 'Daniel', 'Wilson', NULL, 'Lisa Wilson', '+1234567894', 'lisa.wilson@example.com', NULL, NULL, '2025-12-06 08:04:25', '2025-12-06 08:04:25', 1),
-(6, '123123123123', '123123123123', 'adsda', 'asdasd', 'storage/barcodes/student_123123123123.svg', 'asdasd', '+639876543234', 'asdas@gmail.com', 'hgfagshdjkasjdh', '2025-12-17', '2025-12-08 11:20:09', '2025-12-08 11:20:09', 1),
-(7, '987481903249', '987481903249', 'u1623781na', '7189304oj', 'storage/barcodes/student_987481903249.svg', 'asdasd', '+639871627431', 'jkas@gmail.com', 'alksjdkaosd', '1222-12-12', '2025-12-08 11:20:47', '2025-12-08 11:20:47', 1),
-(8, '117324080029', '117324080029', 'Carl Navid', 'Cata-an', 'storage/barcodes/student_117324080029.svg', 'Carly Cata-an', '+639319120634', 'jkas@gmail.com', 'Purok Mangingisda, Pulupandan, Negros Occidental', '2003-03-05', '2025-12-08 11:23:27', '2025-12-11 03:36:15', 1);
+INSERT INTO `students` (`id`, `student_id`, `lrn`, `first_name`, `last_name`, `barcode_path`, `parent_name`, `parent_phone`, `parent_email`, `address`, `date_of_birth`, `created_at`, `updated_at`, `is_active`, `sms_enabled`, `previous_school`) VALUES
+(9, '117327080031', '117327080031', 'Juans', 'Dela Cruz', 'storage/barcodes/student_117327080031.svg', 'Juanito', '+639871627431', 'carly@gmail.com', 'purok mangingisda, barangay zone 1-a, pulupandan', '2003-03-05', '2025-12-19 07:12:42', '2025-12-21 11:19:55', 1, 0, NULL),
+(10, 'STU-2025-0002', '123123123123', 'Sofia', 'First', 'storage/barcodes/student_123123123123.svg', 'Jullie', '+639192381920', 'pearly@gmail.com', 'purok magsasaka, barangay zone 2, pulupandan', '2002-09-02', '2025-12-19 07:15:40', '2025-12-21 11:07:34', 1, 0, NULL);
 
 -- --------------------------------------------------------
 
@@ -217,18 +201,23 @@ CREATE TABLE `student_classes` (
   `class_id` int(11) NOT NULL,
   `enrolled_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `enrolled_by` int(11) DEFAULT NULL COMMENT 'Admin/Teacher who enrolled the student',
-  `is_active` tinyint(1) DEFAULT 1
+  `is_active` tinyint(1) DEFAULT 1,
+  `enrollment_type` enum('regular','transferee','returnee','repeater') DEFAULT 'regular' COMMENT 'Type of enrollment: regular promotion, transferee from another school, returnee, or repeater',
+  `enrollment_status` enum('active','withdrawn','dropped','transferred_out','completed') DEFAULT 'active' COMMENT 'Current status of this enrollment',
+  `status_changed_at` datetime DEFAULT NULL COMMENT 'When the enrollment status was last changed',
+  `status_changed_by` int(10) UNSIGNED DEFAULT NULL COMMENT 'User who changed the status',
+  `status_reason` varchar(255) DEFAULT NULL COMMENT 'Reason for status change (withdrawal reason, etc.)'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Dumping data for table `student_classes`
 --
 
-INSERT INTO `student_classes` (`id`, `student_id`, `class_id`, `enrolled_at`, `enrolled_by`, `is_active`) VALUES
-(1, 8, 1, '2025-12-16 14:05:06', 4, 1),
-(2, 7, 1, '2025-12-16 13:55:44', 4, 0),
-(3, 6, 1, '2025-12-16 13:55:44', 4, 1),
-(4, 4, 1, '2025-12-16 14:04:51', 4, 1);
+INSERT INTO `student_classes` (`id`, `student_id`, `class_id`, `enrolled_at`, `enrolled_by`, `is_active`, `enrollment_type`, `enrollment_status`, `status_changed_at`, `status_changed_by`, `status_reason`) VALUES
+(8, 9, 3, '2025-12-19 07:12:42', 1, 1, 'regular', 'active', NULL, NULL, NULL),
+(9, 9, 4, '2025-12-21 08:47:16', 1, 1, 'regular', 'active', NULL, NULL, NULL),
+(10, 10, 4, '2025-12-19 07:15:40', 1, 0, 'regular', 'active', NULL, NULL, NULL),
+(11, 10, 3, '2025-12-19 07:32:17', 1, 1, 'regular', 'active', NULL, NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -252,7 +241,21 @@ CREATE TABLE `system_logs` (
 --
 
 INSERT INTO `system_logs` (`id`, `log_level`, `message`, `context`, `user_id`, `ip_address`, `user_agent`, `created_at`) VALUES
-(1, 'info', 'Report generated', '{\"filters\":{\"start_date\":\"2025-11-16\",\"end_date\":\"2025-12-16\",\"school_year_id\":1,\"teacher_id\":4},\"record_count\":0}', 4, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-16 14:05:37');
+(1, 'info', 'Report generated', '{\"filters\":{\"start_date\":\"2025-11-16\",\"end_date\":\"2025-12-16\",\"school_year_id\":1,\"teacher_id\":4},\"record_count\":0}', 4, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-16 14:05:37'),
+(2, 'info', 'Report generated', '{\"filters\":{\"start_date\":\"2025-11-19\",\"end_date\":\"2025-12-19\",\"school_year_id\":1},\"record_count\":0}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-19 07:01:50'),
+(4, 'error', 'Placement save failed', '{\"error\":\"SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry \'9-4\' for key \'unique_student_class\'\",\"enrolled_by\":1}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-21 08:45:40'),
+(6, 'error', 'Placement save failed', '{\"error\":\"SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry \'9-4\' for key \'unique_student_class\'\",\"enrolled_by\":1}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-21 08:45:50'),
+(7, 'info', 'Placements saved successfully', '{\"created_count\":1,\"skipped_count\":0,\"enrolled_by\":1}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-21 08:47:16'),
+(8, 'info', 'Placement preview exported', '{\"filename\":\"placement_preview_SY2024_2025_to_SY2025_2026_2025-12-21_094732.csv\",\"record_count\":2,\"source_school_year\":\"2024-2025\",\"target_school_year\":\"2025-2026\"}', 1, '::1', 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36', '2025-12-21 08:47:32'),
+(9, 'info', 'Placement preview downloaded', '{\"filename\":\"placement_preview_SY2024_2025_to_SY2025_2026_2025-12-21_094732.csv\"}', 1, '::1', 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36', '2025-12-21 08:47:32'),
+(10, 'info', 'Placement preview exported', '{\"filename\":\"placement_preview_SY2024_2025_to_SY2025_2026_2025-12-21_095103.csv\",\"record_count\":2,\"source_school_year\":\"2024-2025\",\"target_school_year\":\"2025-2026\"}', 1, '::1', 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36', '2025-12-21 08:51:03'),
+(11, 'info', 'Placement preview downloaded', '{\"filename\":\"placement_preview_SY2024_2025_to_SY2025_2026_2025-12-21_095103.csv\"}', 1, '::1', 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36', '2025-12-21 08:51:03'),
+(12, 'info', 'Placement preview exported', '{\"filename\":\"placement_preview_SY2024_2025_to_SY2025_2026_2025-12-21_095441.csv\",\"record_count\":2,\"source_school_year\":\"2024-2025\",\"target_school_year\":\"2025-2026\"}', 1, '::1', 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36', '2025-12-21 08:54:41'),
+(13, 'info', 'Placement preview downloaded', '{\"filename\":\"placement_preview_SY2024_2025_to_SY2025_2026_2025-12-21_095441.csv\"}', 1, '::1', 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36', '2025-12-21 08:54:41'),
+(14, 'info', 'Placement preview exported', '{\"filename\":\"placement_preview_SY2024_2025_to_SY2025_2026_2025-12-21_100042.csv\",\"record_count\":2,\"source_school_year\":\"2024-2025\",\"target_school_year\":\"2025-2026\"}', 1, '::1', 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36', '2025-12-21 09:00:42'),
+(15, 'info', 'Placement preview downloaded', '{\"filename\":\"placement_preview_SY2024_2025_to_SY2025_2026_2025-12-21_100042.csv\"}', 1, '::1', 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36', '2025-12-21 09:00:42'),
+(16, 'info', 'School year enrollment locked', '{\"school_year_id\":2,\"school_year_name\":\"2025-2026\",\"locked_by\":1}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-21 09:01:20'),
+(17, 'info', 'School year enrollment unlocked', '{\"school_year_id\":2,\"school_year_name\":\"2025-2026\",\"unlocked_by\":1}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-21 09:13:59');
 
 -- --------------------------------------------------------
 
@@ -270,19 +273,19 @@ CREATE TABLE `users` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   `last_login` timestamp NULL DEFAULT NULL,
-  `is_active` tinyint(1) DEFAULT 1
+  `is_active` tinyint(1) DEFAULT 1,
+  `is_premium` tinyint(1) DEFAULT 0 COMMENT 'Whether user has premium access (paid subscription for reports/exports)',
+  `premium_expires_at` date DEFAULT NULL COMMENT 'Premium subscription expiration date (NULL = no expiration)'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `username`, `password_hash`, `role`, `full_name`, `email`, `created_at`, `updated_at`, `last_login`, `is_active`) VALUES
-(1, 'admin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', 'System Administrator', 'admin@attendance.local', '2025-12-06 08:04:25', '2025-12-19 06:00:58', '2025-12-19 06:00:58', 1),
-(2, 'operator', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'operator', 'Attendance Operator', 'operator@attendance.local', '2025-12-06 08:04:25', '2025-12-06 08:04:25', NULL, 1),
-(3, 'viewer', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'viewer', 'Report Viewer', 'viewer@attendance.local', '2025-12-06 08:04:25', '2025-12-06 08:04:25', NULL, 1),
-(4, 'teacher', '$2y$10$sD03JRxYLjcpdG.s7zC/cO/Bcmr.8BaJ8WsjigjDg38JDcITLuZq6', 'teacher', 'teacher', 'teacher@gmail.com', '2025-12-16 13:36:21', '2025-12-16 14:12:17', '2025-12-16 14:12:17', 1),
-(5, 'teacher1', '$2y$10$mWDAZgRK3LhTzr8kXf0OJOQFlhIve4gWxg/ryZLEnoMMxrgXb8002', 'teacher', 'teacher1', 'teacher1@gmail.com', '2025-12-19 05:59:35', '2025-12-19 05:59:47', '2025-12-19 05:59:47', 1);
+INSERT INTO `users` (`id`, `username`, `password_hash`, `role`, `full_name`, `email`, `created_at`, `updated_at`, `last_login`, `is_active`, `is_premium`, `premium_expires_at`) VALUES
+(1, 'admin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', 'System Administrator', 'admin@attendance.local', '2025-12-06 08:04:25', '2025-12-21 10:42:54', '2025-12-21 09:58:20', 1, 1, NULL),
+(4, 'teacher', '$2y$10$sD03JRxYLjcpdG.s7zC/cO/Bcmr.8BaJ8WsjigjDg38JDcITLuZq6', 'teacher', 'Jona Mondia', 'teacher@gmail.com', '2025-12-16 13:36:21', '2025-12-21 11:08:21', '2025-12-21 09:36:34', 1, 0, NULL),
+(5, 'teacher1', '$2y$10$mWDAZgRK3LhTzr8kXf0OJOQFlhIve4gWxg/ryZLEnoMMxrgXb8002', 'teacher', 'Maloi Cruz', 'teacher1@gmail.com', '2025-12-19 05:59:35', '2025-12-21 11:08:54', '2025-12-21 09:46:57', 1, 1, NULL);
 
 --
 -- Indexes for dumped tables
@@ -334,7 +337,8 @@ ALTER TABLE `retry_queue`
 ALTER TABLE `school_years`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `unique_name` (`name`),
-  ADD KEY `idx_active` (`is_active`);
+  ADD KEY `idx_active` (`is_active`),
+  ADD KEY `idx_locked` (`is_locked`);
 
 --
 -- Indexes for table `sessions`
@@ -353,7 +357,8 @@ ALTER TABLE `students`
   ADD UNIQUE KEY `lrn` (`lrn`),
   ADD KEY `idx_student_id` (`student_id`),
   ADD KEY `idx_name` (`last_name`,`first_name`),
-  ADD KEY `idx_lrn` (`lrn`);
+  ADD KEY `idx_lrn` (`lrn`),
+  ADD KEY `idx_sms_enabled` (`sms_enabled`);
 
 --
 -- Indexes for table `student_classes`
@@ -363,7 +368,9 @@ ALTER TABLE `student_classes`
   ADD UNIQUE KEY `unique_student_class` (`student_id`,`class_id`),
   ADD KEY `idx_student` (`student_id`),
   ADD KEY `idx_class` (`class_id`),
-  ADD KEY `idx_enrolled_by` (`enrolled_by`);
+  ADD KEY `idx_enrolled_by` (`enrolled_by`),
+  ADD KEY `idx_enrollment_type` (`enrollment_type`),
+  ADD KEY `idx_enrollment_status` (`enrollment_status`);
 
 --
 -- Indexes for table `system_logs`
@@ -380,7 +387,8 @@ ALTER TABLE `users`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `username` (`username`),
   ADD KEY `idx_username` (`username`),
-  ADD KEY `idx_role` (`role`);
+  ADD KEY `idx_role` (`role`),
+  ADD KEY `idx_is_premium` (`is_premium`);
 
 --
 -- AUTO_INCREMENT for dumped tables
@@ -396,7 +404,7 @@ ALTER TABLE `attendance`
 -- AUTO_INCREMENT for table `classes`
 --
 ALTER TABLE `classes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `notification_logs`
@@ -414,25 +422,25 @@ ALTER TABLE `retry_queue`
 -- AUTO_INCREMENT for table `school_years`
 --
 ALTER TABLE `school_years`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `students`
 --
 ALTER TABLE `students`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 
 --
 -- AUTO_INCREMENT for table `student_classes`
 --
 ALTER TABLE `student_classes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
 
 --
 -- AUTO_INCREMENT for table `system_logs`
 --
 ALTER TABLE `system_logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
 
 --
 -- AUTO_INCREMENT for table `users`

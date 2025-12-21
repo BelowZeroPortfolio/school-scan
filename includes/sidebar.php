@@ -15,13 +15,11 @@ $userRole = $currentUser['role'] ?? 'viewer';
     <!-- Logo Section -->
     <div class="px-6 py-5 theme-border border-b flex items-center" :class="sidebarCollapsed ? 'justify-center px-4' : 'justify-between px-6'">
         <a x-show="!sidebarCollapsed" x-transition href="<?php echo config('app_url'); ?>/pages/dashboard.php" class="flex items-center gap-2.5">
-            <div class="w-9 h-9 bg-gradient-to-br from-violet-600 to-violet-700 rounded-xl flex items-center justify-center shadow-sm flex-shrink-0">
-                <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0zM6 18a1 1 0 001-1v-2.065a8.935 8.935 0 00-2-.712V17a1 1 0 001 1z"/>
-                </svg>
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden">
+                <img src="<?php echo config('app_url'); ?>/assets/images/lex.png" alt="Logo" class="w-full h-full object-contain">
             </div>
             <div class="overflow-hidden">
-                <span class="text-sm font-semibold theme-text-primary block leading-tight whitespace-nowrap">Barcode</span>
+                <span class="text-sm font-semibold theme-text-primary block leading-tight whitespace-nowrap">Lexite</span>
                 <span class="text-xs theme-text-muted block leading-tight whitespace-nowrap">Attendance</span>
             </div>
         </a>
@@ -55,6 +53,23 @@ $userRole = $currentUser['role'] ?? 'viewer';
                     <div x-show="tooltip" x-transition class="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">Dashboard</div>
                 </a>
             </div>
+            
+            <!-- Scan Attendance -->
+            <?php if (in_array($userRole, ['admin', 'operator', 'teacher'])): ?>
+            <div class="mb-1" x-data="{ tooltip: false }">
+                <a href="<?php echo config('app_url'); ?>/scan.php" 
+                   @mouseenter="tooltip = sidebarCollapsed" 
+                   @mouseleave="tooltip = false"
+                   class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-all relative <?php echo $currentPage === 'scan.php' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'; ?>"
+                   :class="sidebarCollapsed ? 'justify-center' : ''">
+                    <svg class="w-5 h-5 flex-shrink-0 <?php echo $currentPage === 'scan.php' ? 'text-green-600' : 'text-gray-400'; ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+                    </svg>
+                    <span x-show="!sidebarCollapsed" x-transition class="whitespace-nowrap">Scan Attendance</span>
+                    <div x-show="tooltip" x-transition class="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">Scan Attendance</div>
+                </a>
+            </div>
+            <?php endif; ?>
         </div>
 
         <!-- STUDENT MANAGEMENT Section -->
@@ -193,6 +208,21 @@ $userRole = $currentUser['role'] ?? 'viewer';
                 </a>
             </div>
 
+            <!-- Student Placement (Requirement 1.1 - Admin only) -->
+            <div class="mb-1" x-data="{ tooltip: false }">
+                <a href="<?php echo config('app_url'); ?>/pages/student-placement.php"
+                   @mouseenter="tooltip = sidebarCollapsed" 
+                   @mouseleave="tooltip = false"
+                   class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-all relative <?php echo $currentPage === 'student-placement.php' ? 'bg-violet-50 text-violet-700' : 'text-gray-600 hover:bg-gray-50'; ?>"
+                   :class="sidebarCollapsed ? 'justify-center' : ''">
+                    <svg class="w-5 h-5 flex-shrink-0 <?php echo $currentPage === 'student-placement.php' ? 'text-violet-600' : 'text-gray-400'; ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                    </svg>
+                    <span x-show="!sidebarCollapsed" x-transition class="whitespace-nowrap">Student Placement</span>
+                    <div x-show="tooltip" x-transition class="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">Student Placement</div>
+                </a>
+            </div>
+
             <!-- System Logs -->
             <div class="mb-1" x-data="{ tooltip: false }">
                 <a href="<?php echo config('app_url'); ?>/pages/logs.php"
@@ -205,6 +235,21 @@ $userRole = $currentUser['role'] ?? 'viewer';
                     </svg>
                     <span x-show="!sidebarCollapsed" x-transition class="whitespace-nowrap">System Logs</span>
                     <div x-show="tooltip" x-transition class="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">System Logs</div>
+                </a>
+            </div>
+            
+            <!-- Subscriptions -->
+            <div class="mb-1" x-data="{ tooltip: false }">
+                <a href="<?php echo config('app_url'); ?>/pages/subscriptions.php"
+                   @mouseenter="tooltip = sidebarCollapsed" 
+                   @mouseleave="tooltip = false"
+                   class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-all relative <?php echo $currentPage === 'subscriptions.php' ? 'bg-violet-50 text-violet-700' : 'text-gray-600 hover:bg-gray-50'; ?>"
+                   :class="sidebarCollapsed ? 'justify-center' : ''">
+                    <svg class="w-5 h-5 flex-shrink-0 <?php echo $currentPage === 'subscriptions.php' ? 'text-violet-600' : 'text-gray-400'; ?>" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clip-rule="evenodd"/>
+                    </svg>
+                    <span x-show="!sidebarCollapsed" x-transition class="whitespace-nowrap">Subscriptions</span>
+                    <div x-show="tooltip" x-transition class="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">Subscriptions</div>
                 </a>
             </div>
             
@@ -250,13 +295,11 @@ $userRole = $currentUser['role'] ?? 'viewer';
            class="fixed inset-y-0 left-0 w-64 theme-bg-card shadow-xl z-50 transform overflow-y-auto">
         <div class="flex items-center justify-between h-16 px-6 theme-border border-b">
             <div class="flex items-center gap-2.5">
-                <div class="w-9 h-9 bg-gradient-to-br from-violet-600 to-violet-700 rounded-xl flex items-center justify-center shadow-sm">
-                    <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0zM6 18a1 1 0 001-1v-2.065a8.935 8.935 0 00-2-.712V17a1 1 0 001 1z"/>
-                    </svg>
+                <div class="w-9 h-9 rounded-xl flex items-center justify-center overflow-hidden">
+                    <img src="<?php echo config('app_url'); ?>/assets/images/lex.png" alt="Logo" class="w-full h-full object-contain">
                 </div>
                 <div>
-                    <span class="text-sm font-semibold theme-text-primary block leading-tight">Barcode</span>
+                    <span class="text-sm font-semibold theme-text-primary block leading-tight">Lexite</span>
                     <span class="text-xs theme-text-muted block leading-tight">Attendance</span>
                 </div>
             </div>
@@ -350,6 +393,12 @@ $userRole = $currentUser['role'] ?? 'viewer';
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                         </svg>
                         School Years
+                    </a>
+                    <a href="<?php echo config('app_url'); ?>/pages/student-placement.php" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl <?php echo $currentPage === 'student-placement.php' ? 'bg-violet-50 text-violet-700' : 'text-gray-600 hover:bg-gray-50'; ?>">
+                        <svg class="w-5 h-5 <?php echo $currentPage === 'student-placement.php' ? 'text-violet-600' : 'text-gray-400'; ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                        </svg>
+                        Student Placement
                     </a>
                     <a href="<?php echo config('app_url'); ?>/pages/logs.php" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl <?php echo $currentPage === 'logs.php' ? 'bg-violet-50 text-violet-700' : 'text-gray-600 hover:bg-gray-50'; ?>">
                         <svg class="w-5 h-5 <?php echo $currentPage === 'logs.php' ? 'text-violet-600' : 'text-gray-400'; ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24">

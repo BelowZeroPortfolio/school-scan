@@ -23,7 +23,7 @@ if (session_status() === PHP_SESSION_NONE) {
 function login($username, $password) {
     try {
         // Fetch user by username
-        $sql = "SELECT id, username, password_hash, role, full_name, email, is_active 
+        $sql = "SELECT id, username, password_hash, role, full_name, email, is_active, is_premium 
                 FROM users 
                 WHERE username = ? AND is_active = 1";
         
@@ -49,6 +49,7 @@ function login($username, $password) {
         $_SESSION['username'] = $user['username'];
         $_SESSION['role'] = $user['role'];
         $_SESSION['full_name'] = $user['full_name'];
+        $_SESSION['is_premium'] = $user['is_premium'] ?? 0;
         $_SESSION['logged_in'] = true;
         $_SESSION['login_time'] = time();
         $_SESSION['last_activity'] = time();
@@ -170,6 +171,7 @@ function getCurrentUser() {
         'username' => $_SESSION['username'] ?? null,
         'role' => $_SESSION['role'] ?? null,
         'full_name' => $_SESSION['full_name'] ?? null,
+        'is_premium' => $_SESSION['is_premium'] ?? 0,
     ];
 }
 
@@ -399,4 +401,94 @@ function getTeacherId() {
     }
     
     return $_SESSION['user_id'] ?? null;
+}
+
+/**
+ * Check if current user has premium access
+ * Admins always have premium access
+ * 
+ * @return bool True if user has premium access
+ */
+function isPremium() {
+    if (!isLoggedIn()) {
+        return false;
+    }
+    
+    // Admins always have premium access
+    if (isAdmin()) {
+        return true;
+    }
+    
+    $userId = $_SESSION['user_id'] ?? null;
+    if (!$userId) {
+        return false;
+    }
+    
+    // Check database for premium status
+    $sql = "SELECT is_premium, premium_expires_at FROM users WHERE id = ? AND is_active = 1";
+    $user = dbFetchOne($sql, [$userId]);
+    
+    if (!$user || !$user['is_premium']) {
+        return false;
+    }
+    
+    // Check if premium has expired
+    if ($user['premium_expires_at'] !== null) {
+        $expiresAt = strtotime($user['premium_expires_at']);
+        if ($expiresAt < time()) {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+/**
+ * Check if a specific user has premium access
+ * 
+ * @param int $userId User ID to check
+ * @return bool True if user has premium access
+ */
+function isUserPremium(int $userId): bool {
+    $sql = "SELECT role, is_premium, premium_expires_at FROM users WHERE id = ? AND is_active = 1";
+    $user = dbFetchOne($sql, [$userId]);
+    
+    if (!$user) {
+        return false;
+    }
+    
+    // Admins always have premium access
+    if ($user['role'] === 'admin') {
+        return true;
+    }
+    
+    if (!$user['is_premium']) {
+        return false;
+    }
+    
+    // Check if premium has expired
+    if ($user['premium_expires_at'] !== null) {
+        $expiresAt = strtotime($user['premium_expires_at']);
+        if ($expiresAt < time()) {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+/**
+ * Require premium access (redirect if not premium)
+ * 
+ * @param string $redirectUrl URL to redirect to (default: dashboard)
+ * @return void
+ */
+function requirePremium($redirectUrl = null) {
+    requireAuth();
+    
+    if (!isPremium()) {
+        $redirectUrl = $redirectUrl ?: config('app_url') . '/pages/dashboard.php';
+        setFlash('error', 'This feature requires a premium subscription. Please contact the administrator.');
+        redirect($redirectUrl);
+    }
 }

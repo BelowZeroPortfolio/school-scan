@@ -10,6 +10,7 @@ require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/schoolyear.php';
 require_once __DIR__ . '/../includes/classes.php';
 
@@ -21,7 +22,7 @@ $currentUser = getCurrentUser();
 $userId = $currentUser['id'] ?? null;
 
 // Get student ID from query string
-$studentId = (int)($_GET['id'] ?? 0);
+$studentId = (int)($_GET['id'] ?? $_POST['student_id'] ?? 0);
 
 if (!$studentId) {
     setFlash('error', 'Invalid student ID.');
@@ -51,6 +52,62 @@ $schoolYearId = $activeSchoolYear ? $activeSchoolYear['id'] : null;
 
 // Get current class for the student (Requirements: 6.3)
 $currentClass = getStudentClass($studentId, $schoolYearId);
+
+// Handle POST actions for enrollment management
+if (isPost() && hasAnyRole(['admin', 'operator'])) {
+    verifyCsrf();
+    $action = $_POST['action'] ?? '';
+    
+    // Handle SMS toggle
+    if ($action === 'toggle_sms') {
+        $smsEnabled = isset($_POST['sms_enabled']) ? 1 : 0;
+        $updateSql = "UPDATE students SET sms_enabled = ? WHERE id = ?";
+        dbExecute($updateSql, [$smsEnabled, $studentId]);
+        
+        // Refresh student data
+        $student = dbFetchOne("SELECT * FROM students WHERE id = ?", [$studentId]);
+        
+        $statusText = $smsEnabled ? 'enabled' : 'disabled';
+        setFlash('success', "SMS notifications {$statusText} for this student.");
+        redirect(config('app_url') . '/pages/student-view.php?id=' . $studentId);
+    }
+    
+    if ($action === 'update_status' && $currentClass) {
+        $newStatus = sanitizeString($_POST['status'] ?? '');
+        $reason = sanitizeString($_POST['reason'] ?? '');
+        
+        $result = updateEnrollmentStatus($studentId, $currentClass['id'], $newStatus, $userId, $reason);
+        setFlash($result['success'] ? 'success' : 'error', $result['message']);
+        redirect(config('app_url') . '/pages/student-view.php?id=' . $studentId);
+    }
+    
+    if ($action === 'transfer_class' && $currentClass) {
+        $toClassId = (int)($_POST['to_class_id'] ?? 0);
+        $reason = sanitizeString($_POST['reason'] ?? '');
+        
+        if ($toClassId > 0) {
+            $result = transferStudentToClass($studentId, $currentClass['id'], $toClassId, $userId, $reason);
+            setFlash($result['success'] ? 'success' : 'error', $result['message']);
+        } else {
+            setFlash('error', 'Please select a class to transfer to.');
+        }
+        redirect(config('app_url') . '/pages/student-view.php?id=' . $studentId);
+    }
+}
+
+// Refresh current class after potential changes
+$currentClass = getStudentClass($studentId, $schoolYearId);
+
+// Get available classes for transfer (same school year, different from current)
+$availableClassesForTransfer = [];
+if ($currentClass && $schoolYearId) {
+    $allClasses = getClassesBySchoolYear($schoolYearId);
+    foreach ($allClasses as $class) {
+        if ($class['id'] != $currentClass['id']) {
+            $availableClassesForTransfer[] = $class;
+        }
+    }
+}
 
 // Get enrollment history across all school years (Requirements: 4.4, 9.4)
 $enrollmentHistory = getStudentEnrollmentHistory($studentId);
@@ -239,36 +296,23 @@ $currentUser = getCurrentUser();
             
             <!-- Sidebar Cards -->
             <div class="lg:col-span-1 space-y-6">
-                <!-- Barcode Card -->
+                <!-- QR Code Card -->
                 <div class="bg-white rounded-xl border border-gray-100 overflow-hidden">
                     <div class="px-6 py-4 bg-gray-50/50 border-b border-gray-100">
-                        <h3 class="text-lg font-semibold text-gray-900">Student Barcode</h3>
+                        <h3 class="text-lg font-semibold text-gray-900">Student QR Code</h3>
                     </div>
                     <div class="p-6">
-                        <?php if ($student['barcode_path']): ?>
-                            <div class="text-center">
-                                <img src="<?php echo config('app_url'); ?>/<?php echo e($student['barcode_path']); ?>" 
-                                    alt="Student Barcode" 
-                                    class="mx-auto mb-4 border border-gray-200 p-3 rounded-lg bg-white"
-                                    style="max-width: 100%;">
-                                <p class="text-sm text-gray-500 mb-4">Scan this barcode to record attendance</p>
-                                <a href="<?php echo config('app_url'); ?>/<?php echo e($student['barcode_path']); ?>" 
-                                    download="barcode_<?php echo e($student['lrn'] ?? $student['student_id']); ?>.png"
-                                    class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors">
-                                    <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                    </svg>
-                                    Download Barcode
-                                </a>
-                            </div>
-                        <?php else: ?>
-                            <div class="text-center py-8">
-                                <svg class="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+                        <div class="text-center">
+                            <div id="student-qrcode" class="mx-auto mb-4 border border-gray-200 p-4 rounded-lg inline-block" style="background-color: #ffffff;"></div>
+                            <p class="text-sm text-gray-500 mb-4">Scan this QR code to record attendance</p>
+                            <button type="button" onclick="downloadQRCode()" 
+                                class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+                                <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                 </svg>
-                                <p class="mt-2 text-sm text-gray-500">No barcode available</p>
-                            </div>
-                        <?php endif; ?>
+                                Download QR Code
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -293,7 +337,7 @@ $currentUser = getCurrentUser();
                             View Attendance History
                         </a>
                         <?php if (hasAnyRole(['admin', 'operator'])): ?>
-                            <a href="<?php echo config('app_url'); ?>/pages/scan.php?student_id=<?php echo $student['student_id']; ?>" 
+                            <a href="<?php echo config('app_url'); ?>/scan.php" 
                                 class="flex items-center justify-center gap-2 w-full px-4 py-2.5 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 transition-colors">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
@@ -303,6 +347,93 @@ $currentUser = getCurrentUser();
                         <?php endif; ?>
                     </div>
                 </div>
+                
+                <!-- SMS Notifications Card (Admin/Operator only) -->
+                <?php if (hasAnyRole(['admin', 'operator'])): ?>
+                <div class="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                    <div class="px-6 py-4 bg-gray-50/50 border-b border-gray-100">
+                        <h3 class="text-lg font-semibold text-gray-900">SMS Notifications</h3>
+                    </div>
+                    <div class="p-6">
+                        <form method="POST" action="">
+                            <?php echo csrfField(); ?>
+                            <input type="hidden" name="action" value="toggle_sms">
+                            
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-lg <?php echo !empty($student['sms_enabled']) ? 'bg-green-100' : 'bg-gray-100'; ?> flex items-center justify-center">
+                                        <svg class="w-5 h-5 <?php echo !empty($student['sms_enabled']) ? 'text-green-600' : 'text-gray-400'; ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-900">Send SMS to Parent</p>
+                                        <p class="text-xs text-gray-500"><?php echo !empty($student['sms_enabled']) ? 'Paid - Active' : 'Not subscribed'; ?></p>
+                                    </div>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" name="sms_enabled" class="sr-only peer" <?php echo !empty($student['sms_enabled']) ? 'checked' : ''; ?> onchange="this.form.submit()">
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                                </label>
+                            </div>
+                            
+                            <p class="mt-3 text-xs text-gray-500">
+                                <?php if (!empty($student['sms_enabled'])): ?>
+                                    <span class="text-green-600">✓</span> Parent will receive SMS when attendance is scanned.
+                                <?php else: ?>
+                                    <span class="text-gray-400">○</span> Enable to send SMS notifications to parent.
+                                <?php endif; ?>
+                            </p>
+                        </form>
+                    </div>
+                </div>
+                <?php endif; ?>
+                
+                <!-- Enrollment Management Card (Admin/Operator only) -->
+                <?php if (hasAnyRole(['admin', 'operator']) && $currentClass): ?>
+                <div class="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                    <div class="px-6 py-4 bg-gray-50/50 border-b border-gray-100">
+                        <h3 class="text-lg font-semibold text-gray-900">Enrollment Management</h3>
+                    </div>
+                    <div class="p-6 space-y-3">
+                        <!-- Transfer to Another Class -->
+                        <button type="button" onclick="openTransferModal()"
+                            class="flex items-center justify-center gap-2 w-full px-4 py-2.5 border border-blue-300 rounded-lg shadow-sm text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                            </svg>
+                            Transfer to Another Class
+                        </button>
+                        
+                        <!-- Mark as Withdrawn -->
+                        <button type="button" onclick="openStatusModal('withdrawn', 'Withdraw Student')"
+                            class="flex items-center justify-center gap-2 w-full px-4 py-2.5 border border-amber-300 rounded-lg shadow-sm text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                            </svg>
+                            Mark as Withdrawn
+                        </button>
+                        
+                        <!-- Mark as Dropped -->
+                        <button type="button" onclick="openStatusModal('dropped', 'Mark as Dropped')"
+                            class="flex items-center justify-center gap-2 w-full px-4 py-2.5 border border-red-300 rounded-lg shadow-sm text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+                            </svg>
+                            Mark as Dropped
+                        </button>
+                        
+                        <!-- Transferred Out -->
+                        <button type="button" onclick="openStatusModal('transferred_out', 'Mark as Transferred Out')"
+                            class="flex items-center justify-center gap-2 w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                            </svg>
+                            Transferred to Another School
+                        </button>
+                    </div>
+                </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -313,7 +444,7 @@ $currentUser = getCurrentUser();
     <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
         <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="closeIDCardModal()"></div>
         
-        <div class="relative bg-white rounded-xl shadow-xl transform transition-all sm:max-w-4xl sm:w-full mx-auto">
+        <div class="relative bg-white rounded-xl shadow-xl transform transition-all sm:max-w-3xl sm:w-full mx-auto">
             <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                 <h3 class="text-lg font-semibold text-gray-900">Student ID Card</h3>
                 <div class="flex items-center gap-2">
@@ -338,78 +469,86 @@ $currentUser = getCurrentUser();
             </div>
             
             <div class="p-6 overflow-auto max-h-[80vh]">
-                <div id="idCardContainer" class="flex flex-col sm:flex-row gap-8 justify-center items-center">
-                    <!-- Front of ID Card (Portrait) - QR Code -->
-                    <div id="idCardFront" class="id-card-front relative" style="width: 300px; height: 480px; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #CE1126 100%); border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); overflow: hidden;">
-                        <!-- Overlay effect -->
-                        <div class="absolute inset-0" style="background: linear-gradient(45deg, transparent 30%, rgba(206, 17, 38, 0.1) 50%, transparent 70%), linear-gradient(-45deg, transparent 30%, rgba(0, 56, 168, 0.1) 50%, transparent 70%); pointer-events: none;"></div>
+                <div id="idCardContainer" class="flex flex-col sm:flex-row gap-6 justify-center items-center">
+                    <!-- Front of ID Card -->
+                    <div id="idCardFront" style="width: 204px; height: 324px; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #CE1126 100%); border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+                        <!-- Header with School Name -->
+                        <div style="background: rgba(206,17,38,0.9); padding: 10px 12px; text-align: center;">
+                            <h3 style="font-size: 11px; font-weight: bold; color: #FCD116; text-transform: uppercase; letter-spacing: 0.5px; margin: 0;"><?php echo e(config('school_name', 'School Name')); ?></h3>
+                        </div>
                         
-                        <!-- Content -->
-                        <div class="relative h-full flex flex-col items-center p-6 text-white">
-                            <!-- Role Badge -->
-                            <div class="px-6 py-1.5 rounded-full mb-4" style="background: #CE1126;">
-                                <span class="text-xs font-bold tracking-widest text-white">STUDENT</span>
+                        <div style="padding: 12px; display: flex; flex-direction: column; height: calc(100% - 42px);">
+                            <!-- Photo and Logo Row -->
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                <!-- Student Photo -->
+                                <div style="width: 80px; height: 90px; border: 2px solid #CE1126; border-radius: 6px; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center;">
+                                    <svg style="width: 40px; height: 40px; color: #CE1126;" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                                    </svg>
+                                </div>
+                                <!-- School Logo -->
+                                <div style="width: 70px; height: 70px; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center;">
+                                    <span style="font-size: 9px; color: rgba(255,255,255,0.6); text-align: center;">LOGO</span>
+                                </div>
                             </div>
                             
-                            <!-- Photo circle with red ring -->
-                            <div class="w-24 h-24 rounded-full flex items-center justify-center" style="border: 4px solid #CE1126; background: rgba(206, 17, 38, 0.2);">
-                                <svg class="w-12 h-12" style="color: #CE1126;" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                                </svg>
-                            </div>
-                            
-                            <!-- Student Name -->
-                            <h4 class="mt-4 text-xl font-bold text-center" style="color: #FCD116;"><?php echo e(strtoupper($student['first_name'] . ' ' . $student['last_name'])); ?></h4>
-                            
-                            <!-- QR Code Box -->
-                            <div class="mt-5 rounded-2xl p-5 flex flex-col items-center shadow-lg" style="background: #ffffff; border: 3px solid #e5e5e5;">
-                                <div id="qrcode-front" style="width: 150px; height: 150px; background: #ffffff; padding: 5px;"></div>
-                                <p class="mt-3 text-sm font-mono font-bold tracking-wider" style="color: #333333;"><?php echo e($student['lrn'] ?? $student['student_id']); ?></p>
-                            </div>
-                            
-                            <!-- Bottom spacer and ID info -->
-                            <div class="mt-auto text-center pt-2">
-                                <p class="text-xs" style="color: rgba(255,255,255,0.7);">SCAN QR CODE FOR ATTENDANCE</p>
-                                <p class="text-sm font-bold mt-1" style="color: #FCD116;">LRN: <?php echo e($student['lrn'] ?? $student['student_id']); ?></p>
+                            <!-- Student Info -->
+                            <div style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+                                <!-- ID Number -->
+                                <div style="margin-bottom: 8px;">
+                                    <p style="font-size: 9px; color: rgba(255,255,255,0.7); margin: 0 0 2px 0;">ID No.</p>
+                                    <p style="font-size: 13px; font-weight: bold; color: #FCD116; font-family: monospace; margin: 0;"><?php echo e($student['lrn'] ?? $student['student_id']); ?></p>
+                                </div>
+                                
+                                <!-- Student Name -->
+                                <div style="margin-bottom: 8px;">
+                                    <p style="font-size: 9px; color: rgba(255,255,255,0.7); margin: 0 0 2px 0;">Student Name</p>
+                                    <p style="font-size: 12px; font-weight: bold; color: white; margin: 0;"><?php echo e(strtoupper($student['first_name'] . ' ' . $student['last_name'])); ?></p>
+                                </div>
+                                
+                                <!-- Grade & Section -->
+                                <div>
+                                    <p style="font-size: 9px; color: rgba(255,255,255,0.7); margin: 0 0 2px 0;">Grade & Section</p>
+                                    <p style="font-size: 12px; font-weight: 600; color: #FCD116; margin: 0;"><?php echo $currentClass ? e($currentClass['grade_level'] . ' - ' . $currentClass['section']) : 'Not Enrolled'; ?></p>
+                                </div>
                             </div>
                         </div>
                     </div>
                     
-                    <!-- Back of ID Card (Portrait) -->
-                    <div id="idCardBack" class="id-card-back relative" style="width: 300px; height: 480px; background: linear-gradient(135deg, #CE1126 0%, #1a1a1a 50%, #0038A8 100%); border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); overflow: hidden;">
-                        <!-- Content -->
-                        <div class="relative h-full flex flex-col p-6 text-white">
-                            <!-- Emergency Header -->
-                            <div class="text-center mb-6">
-                                <h4 class="text-lg font-bold" style="color: #FCD116;">IN CASE OF EMERGENCY</h4>
-                                <p class="text-sm mt-1" style="color: rgba(255,255,255,0.8);">Kindly notify</p>
+                    <!-- Back of ID Card -->
+                    <div id="idCardBack" style="width: 204px; height: 324px; background: linear-gradient(135deg, #CE1126 0%, #1a1a1a 50%, #0038A8 100%); border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+                        <div style="padding: 16px; display: flex; flex-direction: column; height: 100%; align-items: center;">
+                            <!-- QR Code -->
+                            <div style="background: white; border-radius: 8px; padding: 10px; margin-bottom: 8px;">
+                                <div id="qrcode-back" style="width: 100px; height: 100px;"></div>
                             </div>
                             
-                            <!-- Parent/Guardian Info Box - No Labels -->
-                            <div class="w-full rounded-xl p-5 flex-1" style="background: rgba(255,255,255,0.1); backdrop-filter: blur(10px);">
-                                <div class="mb-4 text-center">
-                                    <span class="text-lg font-bold text-white"><?php echo e($student['parent_name'] ?: '—'); ?></span>
-                                </div>
-                                <div class="mb-4 text-center">
-                                    <span class="text-xl font-bold" style="color: #FCD116;"><?php echo e($student['parent_phone'] ?: '—'); ?></span>
-                                </div>
-                                <div class="mb-4 text-center">
-                                    <span class="text-sm text-white break-all"><?php echo e($student['parent_email'] ?: '—'); ?></span>
-                                </div>
-                                <div class="text-center">
-                                    <span class="text-sm text-white leading-tight"><?php echo e($student['address'] ?: '—'); ?></span>
-                                </div>
+                            <!-- School Year -->
+                            <div style="text-align: center; margin-bottom: 16px;">
+                                <p style="font-size: 10px; color: rgba(255,255,255,0.7); margin: 0;">S.Y.</p>
+                                <p style="font-size: 12px; font-weight: bold; color: #FCD116; margin: 0;"><?php echo $activeSchoolYear ? e($activeSchoolYear['name']) : date('Y') . '-' . (date('Y') + 1); ?></p>
                             </div>
                             
-                            <!-- Barcode at bottom -->
-                            <div class="mt-4">
-                                <div class="bg-white rounded-lg p-3 flex flex-col items-center">
-                                    <?php if ($student['barcode_path']): ?>
-                                    <img src="<?php echo config('app_url'); ?>/<?php echo e($student['barcode_path']); ?>" 
-                                        alt="Barcode" class="h-12 w-auto">
-                                    <?php else: ?>
-                                    <div class="h-12 w-40 bg-gray-100 flex items-center justify-center text-xs text-gray-400">No barcode</div>
-                                    <?php endif; ?>
+                            <!-- Contact Person Section -->
+                            <div style="width: 100%; flex: 1; background: rgba(255,255,255,0.1); border-radius: 8px; padding: 10px;">
+                                <div style="text-align: center; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 2px solid #FCD116;">
+                                    <p style="font-size: 10px; font-weight: bold; color: #FCD116; text-transform: uppercase; margin: 0;">Contact Person</p>
+                                </div>
+                                
+                                <!-- Contact Info Lines -->
+                                <div style="padding: 0 4px;">
+                                    <div style="margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 4px;">
+                                        <p style="font-size: 10px; font-weight: 600; color: white; margin: 0;"><?php echo e($student['parent_name'] ?: '—'); ?></p>
+                                    </div>
+                                    <div style="margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 4px;">
+                                        <p style="font-size: 10px; color: rgba(255,255,255,0.9); margin: 0;"><?php echo e($student['parent_phone'] ?: '—'); ?></p>
+                                    </div>
+                                    <div style="margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 4px;">
+                                        <p style="font-size: 9px; color: rgba(255,255,255,0.9); word-break: break-all; margin: 0;"><?php echo e($student['parent_email'] ?: '—'); ?></p>
+                                    </div>
+                                    <div style="border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 4px;">
+                                        <p style="font-size: 9px; color: rgba(255,255,255,0.9); margin: 0;"><?php echo e($student['address'] ?: '—'); ?></p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -428,14 +567,14 @@ function generateIDCard() {
     document.getElementById('idCardModal').classList.remove('hidden');
     document.body.style.overflow = 'hidden';
     
-    // Generate QR code for front of ID card
-    const qrContainer = document.getElementById('qrcode-front');
-    qrContainer.innerHTML = ''; // Clear previous
+    // Generate QR code for back of ID card
+    const qrContainerBack = document.getElementById('qrcode-back');
+    qrContainerBack.innerHTML = ''; // Clear previous
     
-    new QRCode(qrContainer, {
+    new QRCode(qrContainerBack, {
         text: '<?php echo e($student['lrn'] ?? $student['student_id']); ?>',
-        width: 150,
-        height: 150,
+        width: 100,
+        height: 100,
         colorDark: '#000000',
         colorLight: '#ffffff',
         correctLevel: QRCode.CorrectLevel.M
@@ -502,8 +641,166 @@ async function downloadIDCard() {
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         closeIDCardModal();
+        closeStatusModal();
+        closeTransferModal();
     }
 });
+
+// Enrollment Status Modal Functions
+function openStatusModal(status, title) {
+    document.getElementById('statusModalTitle').textContent = title;
+    document.getElementById('statusInput').value = status;
+    document.getElementById('statusModal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeStatusModal() {
+    document.getElementById('statusModal').classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+// Transfer Modal Functions
+function openTransferModal() {
+    document.getElementById('transferModal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeTransferModal() {
+    document.getElementById('transferModal').classList.add('hidden');
+    document.body.style.overflow = '';
+}
+</script>
+
+<!-- Status Change Modal -->
+<div id="statusModal" class="fixed inset-0 z-50 hidden overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="closeStatusModal()"></div>
+        
+        <div class="relative bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:max-w-md sm:w-full mx-auto">
+            <form method="POST" action="">
+                <?php echo csrfField(); ?>
+                <input type="hidden" name="action" value="update_status">
+                <input type="hidden" name="student_id" value="<?php echo $studentId; ?>">
+                <input type="hidden" name="status" id="statusInput" value="">
+                
+                <div class="bg-white px-6 pt-6 pb-4">
+                    <h3 id="statusModalTitle" class="text-lg font-semibold text-gray-900 mb-4">Update Status</h3>
+                    
+                    <div class="mb-4">
+                        <label for="reason" class="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+                        <textarea name="reason" id="reason" rows="3" required
+                            class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                            placeholder="Enter reason for this status change..."></textarea>
+                    </div>
+                    
+                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <p class="text-sm text-amber-700">
+                            <svg class="inline-block w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                            </svg>
+                            This action will remove the student from their current class.
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-50 px-6 py-4 flex justify-end gap-3">
+                    <button type="button" onclick="closeStatusModal()" class="px-4 py-2.5 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-4 py-2.5 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 transition-colors">
+                        Confirm
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Transfer Class Modal -->
+<div id="transferModal" class="fixed inset-0 z-50 hidden overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="closeTransferModal()"></div>
+        
+        <div class="relative bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:max-w-md sm:w-full mx-auto">
+            <form method="POST" action="">
+                <?php echo csrfField(); ?>
+                <input type="hidden" name="action" value="transfer_class">
+                <input type="hidden" name="student_id" value="<?php echo $studentId; ?>">
+                
+                <div class="bg-white px-6 pt-6 pb-4">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Transfer to Another Class</h3>
+                    
+                    <?php if ($currentClass): ?>
+                    <div class="mb-4 p-3 bg-gray-50 rounded-lg">
+                        <p class="text-sm text-gray-600">Current Class:</p>
+                        <p class="font-medium text-gray-900"><?php echo e($currentClass['grade_level'] . ' - ' . $currentClass['section']); ?></p>
+                    </div>
+                    <?php endif; ?>
+                    
+                    <div class="mb-4">
+                        <label for="to_class_id" class="block text-sm font-medium text-gray-700 mb-1">Transfer To <span class="text-red-500">*</span></label>
+                        <select name="to_class_id" id="to_class_id" required
+                            class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+                            <option value="">— Select a class —</option>
+                            <?php foreach ($availableClassesForTransfer as $class): ?>
+                                <option value="<?php echo $class['id']; ?>">
+                                    <?php echo e($class['grade_level'] . ' - ' . $class['section']); ?>
+                                    (<?php echo e($class['teacher_name']); ?>)
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="transfer_reason" class="block text-sm font-medium text-gray-700 mb-1">Reason (Optional)</label>
+                        <textarea name="reason" id="transfer_reason" rows="2"
+                            class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                            placeholder="Enter reason for transfer..."></textarea>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-50 px-6 py-4 flex justify-end gap-3">
+                    <button type="button" onclick="closeTransferModal()" class="px-4 py-2.5 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-4 py-2.5 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700 transition-colors">
+                        Transfer Student
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- QR Code Library -->
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script>
+    // Generate QR code on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        const qrContainer = document.getElementById('student-qrcode');
+        if (qrContainer) {
+            new QRCode(qrContainer, {
+                text: '<?php echo e($student['lrn'] ?? $student['student_id']); ?>',
+                width: 150,
+                height: 150,
+                colorDark: '#000000',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.M
+            });
+        }
+    });
+    
+    // Download QR code as PNG
+    function downloadQRCode() {
+        const qrContainer = document.getElementById('student-qrcode');
+        const canvas = qrContainer.querySelector('canvas');
+        if (canvas) {
+            const link = document.createElement('a');
+            link.download = 'qrcode_<?php echo e($student['lrn'] ?? $student['student_id']); ?>.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+    }
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

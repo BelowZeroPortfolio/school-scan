@@ -77,7 +77,7 @@ if (isPost()) {
     <!-- Tailwind CSS -->
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="<?php echo config('app_url'); ?>/assets/images/icon.svg">
+    <link rel="icon" type="image/png" href="<?php echo config('app_url'); ?>/assets/images/lex.png">
     <!-- Theme System -->
     <?php require_once __DIR__ . '/../includes/theme.php'; ?>
     <!-- reCAPTCHA -->

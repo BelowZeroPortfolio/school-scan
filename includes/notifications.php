@@ -136,6 +136,16 @@ function logNotification($studentId, $recipient, $message, $success, $errorMessa
 }
 
 /**
+ * Check if SMS is enabled for a specific student
+ * 
+ * @param array $student Student data (must include sms_enabled field)
+ * @return bool True if SMS is enabled for this student
+ */
+function isStudentSmsEnabled($student): bool {
+    return isset($student['sms_enabled']) && (int)$student['sms_enabled'] === 1;
+}
+
+/**
  * Send attendance notification with detailed status
  * 
  * @param array $student Student data
@@ -146,6 +156,12 @@ function sendAttendanceNotificationWithStatus($student, $status = 'present') {
     $result = [
         'sms' => ['attempted' => false, 'success' => false, 'error' => null, 'recipient' => null]
     ];
+    
+    // Check if SMS is enabled for this student (paid subscription)
+    if (!isStudentSmsEnabled($student)) {
+        $result['sms']['error'] = 'SMS not enabled for this student';
+        return $result;
+    }
     
     $message = formatAttendanceMessage($student, $status);
     
@@ -228,6 +244,12 @@ function sendDismissalNotificationWithStatus($student) {
     $result = [
         'sms' => ['attempted' => false, 'success' => false, 'error' => null, 'recipient' => null]
     ];
+    
+    // Check if SMS is enabled for this student (paid subscription)
+    if (!isStudentSmsEnabled($student)) {
+        $result['sms']['error'] = 'SMS not enabled for this student';
+        return $result;
+    }
     
     $message = formatDismissalMessage($student);
     
