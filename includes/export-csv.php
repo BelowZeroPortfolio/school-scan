@@ -62,13 +62,13 @@ function exportToCsv($data, $filename = 'attendance_report', $options = []) {
         
         // Write header row
         $headers = [
-            'Date',
-            'Student Number',
-            'First Name',
-            'Last Name',
+            'Student ID',
+            'Name',
             'Class',
-            'Section',
-            'Check-in Time',
+            'Arrival Date',
+            'Arrival Time',
+            'Dismissal Date',
+            'Dismissal Time',
             'Status',
             'Recorded By'
         ];
@@ -79,15 +79,30 @@ function exportToCsv($data, $filename = 'attendance_report', $options = []) {
             // Use class-based data if available, fall back to legacy
             $classValue = $row['class_grade'] ?? $row['class'] ?? '';
             $sectionValue = $row['class_section'] ?? $row['section'] ?? '';
+            $classDisplay = $classValue . ($sectionValue ? ' - ' . $sectionValue : '');
+            
+            // Format arrival time
+            $arrivalTime = '';
+            if (!empty($row['check_in_time'])) {
+                $arrivalTime = date('h:i A', strtotime($row['check_in_time']));
+            }
+            
+            // Format dismissal date and time from check_out_time
+            $dismissalDate = '';
+            $dismissalTime = '';
+            if (!empty($row['check_out_time'])) {
+                $dismissalDate = date('M d, Y', strtotime($row['check_out_time']));
+                $dismissalTime = date('h:i A', strtotime($row['check_out_time']));
+            }
             
             $csvRow = [
-                $row['attendance_date'] ?? '',
                 $row['student_number'] ?? '',
-                $row['first_name'] ?? '',
-                $row['last_name'] ?? '',
-                $classValue,
-                $sectionValue,
-                $row['check_in_time'] ?? '',
+                ($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''),
+                $classDisplay,
+                $row['attendance_date'] ?? '',
+                $arrivalTime,
+                $dismissalDate,
+                $dismissalTime,
                 ucfirst($row['status'] ?? ''),
                 $row['recorded_by'] ?? ''
             ];

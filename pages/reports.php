@@ -186,30 +186,47 @@ if (isTeacher() && $userId) {
     $teacherIdFilter = $userId;
 }
 
-// Generate preview data if filters are applied
-$previewData = [];
-$previewStats = [];
-if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['preview'])) {
-    $filters = [
-        'start_date' => $startDate,
-        'end_date' => $endDate,
-        'class' => $selectedClass ?: null,
-        'section' => $selectedSection ?: null,
-        'status' => $selectedStatus ?: null,
-        'school_year_id' => $selectedSchoolYearId,
-        'class_id' => $selectedClassId,
-        'teacher_id' => $teacherIdFilter ?: $selectedTeacherId
-    ];
-    
-    $filters = array_filter($filters, function($value) {
-        return $value !== null && $value !== '';
-    });
-    
-    $previewData = generateReport($filters);
-    $previewStats = calculateReportStats($previewData, $filters);
-}
+// Always generate preview data (show data by default)
+$filters = [
+    'start_date' => $startDate,
+    'end_date' => $endDate,
+    'class' => $selectedClass ?: null,
+    'section' => $selectedSection ?: null,
+    'status' => $selectedStatus ?: null,
+    'school_year_id' => $selectedSchoolYearId,
+    'class_id' => $selectedClassId,
+    'teacher_id' => $teacherIdFilter ?: $selectedTeacherId
+];
+
+$filters = array_filter($filters, function($value) {
+    return $value !== null && $value !== '';
+});
+
+$previewData = generateReport($filters);
+$previewStats = calculateReportStats($previewData, $filters);
 
 $pageTitle = 'Attendance Reports';
+
+// Use filter dates for chart data (dynamically based on filters)
+$chartStartDate = $startDate;
+$chartEndDate = $endDate;
+
+// Get attendance overview data (for doughnut chart)
+$overviewFilters = [
+    'start_date' => $chartStartDate,
+    'end_date' => $chartEndDate,
+    'school_year_id' => $selectedSchoolYearId,
+    'class_id' => $selectedClassId,
+    'teacher_id' => $teacherIdFilter ?: $selectedTeacherId
+];
+$overviewData = generateReport($overviewFilters);
+$overviewStats = calculateReportStats($overviewData, $overviewFilters);
+
+// Get weekly trend data (for line chart)
+$weeklyTrend = getWeeklyAttendanceTrend(8, $selectedSchoolYearId, $teacherIdFilter ?: $selectedTeacherId);
+
+// Get class comparison data (for bar chart)
+$classComparison = getClassAttendanceComparison($chartStartDate, $chartEndDate, $selectedSchoolYearId, $teacherIdFilter ?: $selectedTeacherId);
 ?>
 
 <?php require_once __DIR__ . '/../includes/header.php'; ?>
@@ -303,19 +320,6 @@ $pageTitle = 'Attendance Reports';
                         </div>
                         <?php endif; ?>
                         
-                        <!-- Legacy Class Filter -->
-                        <div>
-                            <label for="class" class="block text-sm font-medium text-gray-700 mb-1">Grade (Legacy)</label>
-                            <select id="class" name="class" class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-colors theme-bg-card theme-text-primary">
-                                <option value="">All Grades</option>
-                                <?php foreach ($availableClasses as $class): ?>
-                                    <option value="<?php echo e($class); ?>" <?php echo $selectedClass === $class ? 'selected' : ''; ?>>
-                                        <?php echo e($class); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        
                         <!-- Status Filter -->
                         <div>
                             <label for="status" class="block text-sm font-medium text-gray-700 mb-1">Status</label>
@@ -342,7 +346,7 @@ $pageTitle = 'Attendance Reports';
                     <div class="flex gap-3">
                         <button type="submit" name="preview" value="1" 
                                 class="px-6 py-2 bg-violet-600 text-white rounded-xl hover:bg-violet-700 focus:ring-4 focus:ring-violet-300 transition-all font-medium">
-                            Preview Report
+                            Apply Filters
                         </button>
                         <a href="?" class="px-6 py-2 bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-all font-medium">
                             Reset Filters
@@ -351,28 +355,73 @@ $pageTitle = 'Attendance Reports';
                 </form>
             </div>
             
+            <!-- Attendance Visualizations -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <!-- Attendance Overview (Doughnut Chart) -->
+                <div class="bg-white rounded-xl p-6 border border-gray-100">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Attendance Overview</h3>
+                    <p class="text-xs text-gray-500 mb-4"><?php echo e($startDate); ?> to <?php echo e($endDate); ?></p>
+                    <div class="relative" style="height: 220px;">
+                        <canvas id="attendanceOverviewChart"></canvas>
+                    </div>
+                    <div class="mt-4 grid grid-cols-3 gap-2 text-center">
+                        <div>
+                            <div class="text-lg font-bold text-green-600"><?php echo $overviewStats['present'] ?? 0; ?></div>
+                            <div class="text-xs text-gray-500">Present</div>
+                        </div>
+                        <div>
+                            <div class="text-lg font-bold text-orange-500"><?php echo $overviewStats['late'] ?? 0; ?></div>
+                            <div class="text-xs text-gray-500">Late</div>
+                        </div>
+                        <div>
+                            <div class="text-lg font-bold text-red-500"><?php echo $overviewStats['absent'] ?? 0; ?></div>
+                            <div class="text-xs text-gray-500">Absent</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Weekly Trend (Line Chart) -->
+                <div class="bg-white rounded-xl p-6 border border-gray-100 lg:col-span-2">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Weekly Attendance Trend</h3>
+                    <p class="text-xs text-gray-500 mb-4">Last 8 weeks attendance rate</p>
+                    <div class="relative" style="height: 220px;">
+                        <canvas id="weeklyTrendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Class Comparison (Bar Chart) -->
+            <?php if (!empty($classComparison)): ?>
+            <div class="bg-white rounded-xl p-6 border border-gray-100 mb-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Class Attendance Comparison</h3>
+                <p class="text-xs text-gray-500 mb-4">Attendance rate by class (<?php echo e($startDate); ?> to <?php echo e($endDate); ?>)</p>
+                <div class="relative" style="height: 300px;">
+                    <canvas id="classComparisonChart"></canvas>
+                </div>
+            </div>
+            <?php endif; ?>
+            
             <!-- Statistics Summary -->
-            <?php if (!empty($previewStats)): ?>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
                     <div class="bg-white rounded-xl p-6 border border-gray-100">
                         <div class="text-sm font-medium text-gray-600">Total Records</div>
-                        <div class="text-2xl font-bold text-gray-900 mt-1"><?php echo e($previewStats['total_records']); ?></div>
+                        <div class="text-2xl font-bold text-gray-900 mt-1"><?php echo e($previewStats['total_records'] ?? 0); ?></div>
                     </div>
                     <div class="bg-white rounded-xl p-6 border border-gray-100">
                         <div class="text-sm font-medium text-gray-600">Present</div>
-                        <div class="text-2xl font-bold text-green-600 mt-1"><?php echo e($previewStats['present']); ?></div>
+                        <div class="text-2xl font-bold text-green-600 mt-1"><?php echo e($previewStats['present'] ?? 0); ?></div>
                     </div>
                     <div class="bg-white rounded-xl p-6 border border-gray-100">
                         <div class="text-sm font-medium text-gray-600">Late</div>
-                        <div class="text-2xl font-bold text-orange-600 mt-1"><?php echo e($previewStats['late']); ?></div>
+                        <div class="text-2xl font-bold text-orange-600 mt-1"><?php echo e($previewStats['late'] ?? 0); ?></div>
                     </div>
                     <div class="bg-white rounded-xl p-6 border border-gray-100">
                         <div class="text-sm font-medium text-gray-600">Absent</div>
-                        <div class="text-2xl font-bold text-red-600 mt-1"><?php echo e($previewStats['absent']); ?></div>
+                        <div class="text-2xl font-bold text-red-600 mt-1"><?php echo e($previewStats['absent'] ?? 0); ?></div>
                     </div>
                     <div class="bg-white rounded-xl p-6 border border-gray-100">
                         <div class="text-sm font-medium text-gray-600">Attendance %</div>
-                        <div class="text-2xl font-bold text-violet-600 mt-1"><?php echo e($previewStats['attendance_percentage']); ?>%</div>
+                        <div class="text-2xl font-bold text-violet-600 mt-1"><?php echo e($previewStats['attendance_percentage'] ?? 0); ?>%</div>
                     </div>
                 </div>
                 
@@ -448,11 +497,15 @@ $pageTitle = 'Attendance Reports';
                         <table class="min-w-full divide-y divide-gray-100">
                             <thead class="bg-gray-50/50">
                                 <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student ID</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Arrival Date</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Arrival Time</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dismissal Date</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dismissal Time</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Recorded By</th>
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-100">
@@ -461,22 +514,28 @@ $pageTitle = 'Attendance Reports';
                                 foreach ($displayData as $record): 
                                 ?>
                                     <tr class="hover:bg-gray-50">
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                            <?php echo e($record['student_number'] ?? $record['student_id'] ?? ''); ?>
+                                        </td>
+                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            <?php echo e($record['first_name'] . ' ' . $record['last_name']); ?>
+                                        </td>
+                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            <?php echo e(($record['class'] ?? 'N/A') . ($record['section'] ? ' - ' . $record['section'] : '')); ?>
+                                        </td>
+                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                                             <?php echo e($record['attendance_date']); ?>
                                         </td>
-                                        <td class="px-6 py-4 whitespace-nowrap">
-                                            <div class="text-sm font-medium text-gray-900">
-                                                <?php echo e($record['first_name'] . ' ' . $record['last_name']); ?>
-                                            </div>
-                                            <div class="text-sm text-gray-500"><?php echo e($record['student_number']); ?></div>
+                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            <?php echo !empty($record['check_in_time']) ? e(date('h:i A', strtotime($record['check_in_time']))) : '<span class="text-gray-400">—</span>'; ?>
                                         </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            <?php echo e($record['class'] . ' ' . $record['section']); ?>
+                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            <?php echo !empty($record['check_out_time']) ? e(date('M d, Y', strtotime($record['check_out_time']))) : '<span class="text-gray-400">—</span>'; ?>
                                         </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            <?php echo e(date('H:i', strtotime($record['check_in_time']))); ?>
+                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            <?php echo !empty($record['check_out_time']) ? e(date('h:i A', strtotime($record['check_out_time']))) : '<span class="text-gray-400">—</span>'; ?>
                                         </td>
-                                        <td class="px-6 py-4 whitespace-nowrap">
+                                        <td class="px-4 py-4 whitespace-nowrap">
                                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
                                                 <?php 
                                                 echo $record['status'] === 'present' ? 'bg-green-100 text-green-800' : 
@@ -485,12 +544,15 @@ $pageTitle = 'Attendance Reports';
                                                 <?php echo e(ucfirst($record['status'])); ?>
                                             </span>
                                         </td>
+                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            <?php echo e($record['recorded_by_name'] ?? $record['recorded_by'] ?? 'System'); ?>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                                 
                                 <?php if (empty($displayData)): ?>
                                     <tr>
-                                        <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+                                        <td colspan="9" class="px-6 py-8 text-center text-gray-500">
                                             No records found for the selected filters
                                         </td>
                                     </tr>
@@ -499,8 +561,184 @@ $pageTitle = 'Attendance Reports';
                         </table>
                     </div>
                 </div>
-            <?php endif; ?>
         </div>
     </main>
+
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<script>
+// Chart data from PHP
+const overviewData = {
+    present: <?php echo $overviewStats['present'] ?? 0; ?>,
+    late: <?php echo $overviewStats['late'] ?? 0; ?>,
+    absent: <?php echo $overviewStats['absent'] ?? 0; ?>
+};
+
+const weeklyTrendData = <?php echo json_encode($weeklyTrend); ?>;
+const classComparisonData = <?php echo json_encode($classComparison); ?>;
+
+// Color palette
+const colors = {
+    present: '#10B981',
+    late: '#F59E0B', 
+    absent: '#EF4444',
+    violet: '#8B5CF6',
+    violetLight: 'rgba(139, 92, 246, 0.1)'
+};
+
+// 1. Attendance Overview Doughnut Chart
+const overviewCtx = document.getElementById('attendanceOverviewChart');
+if (overviewCtx) {
+    new Chart(overviewCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Present', 'Late', 'Absent'],
+            datasets: [{
+                data: [overviewData.present, overviewData.late, overviewData.absent],
+                backgroundColor: [colors.present, colors.late, colors.absent],
+                borderWidth: 0,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '65%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 15,
+                        usePointStyle: true,
+                        pointStyle: 'circle',
+                        font: { size: 11 }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = total > 0 ? ((context.raw / total) * 100).toFixed(1) : 0;
+                            return `${context.label}: ${context.raw} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// 2. Weekly Trend Line Chart
+const trendCtx = document.getElementById('weeklyTrendChart');
+if (trendCtx && weeklyTrendData.length > 0) {
+    const labels = weeklyTrendData.map(w => {
+        const date = new Date(w.week_start);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    });
+    
+    new Chart(trendCtx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Attendance Rate (%)',
+                data: weeklyTrendData.map(w => w.attendance_rate || 0),
+                borderColor: colors.violet,
+                backgroundColor: colors.violetLight,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                pointBackgroundColor: colors.violet
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        callback: value => value + '%'
+                    },
+                    grid: { color: 'rgba(0,0,0,0.05)' }
+                },
+                x: {
+                    grid: { display: false }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => `Attendance: ${ctx.raw}%`
+                    }
+                }
+            }
+        }
+    });
+} else if (trendCtx) {
+    trendCtx.parentElement.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400 text-sm">No trend data available</div>';
+}
+
+// 3. Class Comparison Bar Chart
+const classCtx = document.getElementById('classComparisonChart');
+if (classCtx && classComparisonData.length > 0) {
+    new Chart(classCtx, {
+        type: 'bar',
+        data: {
+            labels: classComparisonData.map(c => c.class_name),
+            datasets: [{
+                label: 'Attendance Rate (%)',
+                data: classComparisonData.map(c => c.attendance_rate || 0),
+                backgroundColor: classComparisonData.map(c => {
+                    const rate = c.attendance_rate || 0;
+                    if (rate >= 90) return colors.present;
+                    if (rate >= 75) return colors.late;
+                    return colors.absent;
+                }),
+                borderRadius: 6,
+                maxBarThickness: 50
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: classComparisonData.length > 6 ? 'y' : 'x',
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        callback: value => value + '%'
+                    },
+                    grid: { color: 'rgba(0,0,0,0.05)' }
+                },
+                x: {
+                    grid: { display: false }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            const classData = classComparisonData[ctx.dataIndex];
+                            return [
+                                `Rate: ${ctx.raw}%`,
+                                `Present: ${classData.present_count}`,
+                                `Late: ${classData.late_count}`,
+                                `Absent: ${classData.absent_count}`
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

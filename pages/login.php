@@ -23,46 +23,48 @@ if (isPost()) {
     
     $username = sanitizeString($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
-    $recaptchaResponse = $_POST['g-recaptcha-response'] ?? '';
+    // $recaptchaResponse = $_POST['g-recaptcha-response'] ?? '';
     
     // Validate required fields
     if (empty($username) || empty($password)) {
         $error = 'Please enter both username and password.';
-    } elseif (empty($recaptchaResponse)) {
-        $error = 'Please complete the reCAPTCHA verification.';
     } else {
-        // Verify reCAPTCHA
-        $recaptchaSecret = config('recaptcha_secret_key');
-        $recaptchaUrl = 'https://www.google.com/recaptcha/api/siteverify';
+        // reCAPTCHA validation disabled
+        // } elseif (empty($recaptchaResponse)) {
+        //     $error = 'Please complete the reCAPTCHA verification.';
+        // } else {
+        //     // Verify reCAPTCHA
+        //     $recaptchaSecret = config('recaptcha_secret_key');
+        //     $recaptchaUrl = 'https://www.google.com/recaptcha/api/siteverify';
+        //     
+        //     $recaptchaData = [
+        //         'secret' => $recaptchaSecret,
+        //         'response' => $recaptchaResponse,
+        //         'remoteip' => $_SERVER['REMOTE_ADDR']
+        //     ];
+        //     
+        //     $options = [
+        //         'http' => [
+        //             'header' => "Content-type: application/x-www-form-urlencoded\r\n",
+        //             'method' => 'POST',
+        //             'content' => http_build_query($recaptchaData)
+        //         ]
+        //     ];
+        //     
+        //     $context = stream_context_create($options);
+        //     $recaptchaResult = file_get_contents($recaptchaUrl, false, $context);
+        //     $recaptchaJson = json_decode($recaptchaResult, true);
+        //     
+        //     if (!$recaptchaJson['success']) {
+        //         $error = 'reCAPTCHA verification failed. Please try again.';
+        //     } else {
         
-        $recaptchaData = [
-            'secret' => $recaptchaSecret,
-            'response' => $recaptchaResponse,
-            'remoteip' => $_SERVER['REMOTE_ADDR']
-        ];
-        
-        $options = [
-            'http' => [
-                'header' => "Content-type: application/x-www-form-urlencoded\r\n",
-                'method' => 'POST',
-                'content' => http_build_query($recaptchaData)
-            ]
-        ];
-        
-        $context = stream_context_create($options);
-        $recaptchaResult = file_get_contents($recaptchaUrl, false, $context);
-        $recaptchaJson = json_decode($recaptchaResult, true);
-        
-        if (!$recaptchaJson['success']) {
-            $error = 'reCAPTCHA verification failed. Please try again.';
+        // Attempt login
+        if (login($username, $password)) {
+            // Redirect to appropriate dashboard based on role
+            redirectToDashboard();
         } else {
-            // Attempt login
-            if (login($username, $password)) {
-                // Redirect to appropriate dashboard based on role
-                redirectToDashboard();
-            } else {
-                $error = 'Invalid username or password.';
-            }
+            $error = 'Invalid username or password.';
         }
     }
 }
@@ -80,8 +82,8 @@ if (isPost()) {
     <link rel="icon" type="image/png" href="<?php echo config('app_url'); ?>/assets/images/lex.png">
     <!-- Theme System -->
     <?php require_once __DIR__ . '/../includes/theme.php'; ?>
-    <!-- reCAPTCHA -->
-    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <!-- reCAPTCHA - Disabled -->
+    <!-- <script src="https://www.google.com/recaptcha/api.js" async defer></script> -->
 </head>
 <body class="theme-bg-primary min-h-screen">
     <div class="min-h-screen flex flex-col">
@@ -217,10 +219,10 @@ if (isPost()) {
                             </a>
                         </div>
                         
-                        <!-- reCAPTCHA -->
-                        <div class="flex justify-center">
+                        <!-- reCAPTCHA - Disabled -->
+                        <!-- <div class="flex justify-center">
                             <div class="g-recaptcha" data-sitekey="<?php echo e(config('recaptcha_site_key')); ?>"></div>
-                        </div>
+                        </div> -->
                         
                         <!-- Submit Button -->
                         <button 

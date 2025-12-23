@@ -135,7 +135,7 @@ function exportToExcel($data, $stats = [], $filename = 'attendance_report', $opt
             
             // Table header
             $headerRow = $row;
-            $headers = ['Date', 'Student Number', 'First Name', 'Last Name', 'Class', 'Section', 'Check-in Time', 'Status', 'Recorded By'];
+            $headers = ['Student ID', 'Name', 'Class', 'Arrival Date', 'Arrival Time', 'Dismissal Date', 'Dismissal Time', 'Status', 'Recorded By'];
             $col = 'A';
             foreach ($headers as $header) {
                 $sheet->setCellValue($col . $row, $header);
@@ -159,14 +159,29 @@ function exportToExcel($data, $stats = [], $filename = 'attendance_report', $opt
                 // Use class-based data if available, fall back to legacy
                 $classValue = $record['class_grade'] ?? $record['class'] ?? '';
                 $sectionValue = $record['class_section'] ?? $record['section'] ?? '';
+                $classDisplay = $classValue . ($sectionValue ? ' - ' . $sectionValue : '');
                 
-                $sheet->setCellValue('A' . $row, $record['attendance_date'] ?? '');
-                $sheet->setCellValue('B' . $row, $record['student_number'] ?? '');
-                $sheet->setCellValue('C' . $row, $record['first_name'] ?? '');
-                $sheet->setCellValue('D' . $row, $record['last_name'] ?? '');
-                $sheet->setCellValue('E' . $row, $classValue);
-                $sheet->setCellValue('F' . $row, $sectionValue);
-                $sheet->setCellValue('G' . $row, $record['check_in_time'] ?? '');
+                // Format arrival time
+                $arrivalTime = '';
+                if (!empty($record['check_in_time'])) {
+                    $arrivalTime = date('h:i A', strtotime($record['check_in_time']));
+                }
+                
+                // Format dismissal date and time from check_out_time
+                $dismissalDate = '';
+                $dismissalTime = '';
+                if (!empty($record['check_out_time'])) {
+                    $dismissalDate = date('M d, Y', strtotime($record['check_out_time']));
+                    $dismissalTime = date('h:i A', strtotime($record['check_out_time']));
+                }
+                
+                $sheet->setCellValue('A' . $row, $record['student_number'] ?? '');
+                $sheet->setCellValue('B' . $row, ($record['first_name'] ?? '') . ' ' . ($record['last_name'] ?? ''));
+                $sheet->setCellValue('C' . $row, $classDisplay);
+                $sheet->setCellValue('D' . $row, $record['attendance_date'] ?? '');
+                $sheet->setCellValue('E' . $row, $arrivalTime);
+                $sheet->setCellValue('F' . $row, $dismissalDate);
+                $sheet->setCellValue('G' . $row, $dismissalTime);
                 $sheet->setCellValue('H' . $row, ucfirst($record['status'] ?? ''));
                 $sheet->setCellValue('I' . $row, $record['recorded_by'] ?? '');
                 

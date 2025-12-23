@@ -125,13 +125,35 @@ if (isPost()) {
             // Generate barcode using LRN
             $barcodePath = generateStudentBarcode($formData['lrn']);
             
+            // Handle photo upload (no file size limit)
+            $photoPath = null;
+            if (isset($_FILES['student_photo']) && $_FILES['student_photo']['error'] === UPLOAD_ERR_OK) {
+                $uploadDir = __DIR__ . '/../storage/photos/';
+                if (!is_dir($uploadDir)) {
+                    mkdir($uploadDir, 0755, true);
+                }
+                
+                $fileInfo = pathinfo($_FILES['student_photo']['name']);
+                $extension = strtolower($fileInfo['extension'] ?? 'jpg');
+                $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+                
+                if (in_array($extension, $allowedExtensions)) {
+                    $newFilename = 'student_' . time() . '_' . uniqid() . '.' . $extension;
+                    $targetPath = $uploadDir . $newFilename;
+                    
+                    if (move_uploaded_file($_FILES['student_photo']['tmp_name'], $targetPath)) {
+                        $photoPath = 'storage/photos/' . $newFilename;
+                    }
+                }
+            }
+            
             // Insert student record
             // Note: class/section now comes from student_classes -> classes relationship
             $sql = "INSERT INTO students (
                         student_id, lrn, first_name, last_name,
-                        barcode_path, parent_name, parent_phone, parent_email,
+                        barcode_path, photo_path, parent_name, parent_phone, parent_email,
                         address, date_of_birth, is_active, previous_school
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)";
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)";
             
             $params = [
                 $studentCode,
@@ -139,6 +161,7 @@ if (isPost()) {
                 $formData['first_name'],
                 $formData['last_name'],
                 $barcodePath,
+                $photoPath,
                 $formData['parent_name'],
                 $formData['parent_phone'],
                 $formData['parent_email'],
@@ -224,7 +247,7 @@ $currentUser = getCurrentUser();
             </div>
         <?php endif; ?>
 
-        <form method="POST" action="" class="bg-white rounded-xl border border-gray-100 p-6">
+        <form method="POST" action="" enctype="multipart/form-data" class="bg-white rounded-xl border border-gray-100 p-6">
             <?php echo csrfField(); ?>
             
             <div class="space-y-8">
@@ -273,6 +296,25 @@ $currentUser = getCurrentUser();
                             <input type="date" name="date_of_birth" id="date_of_birth"
                                 value="<?php echo e($formData['date_of_birth'] ?? ''); ?>"
                                 class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500">
+                        </div>
+                        
+                        <!-- Student Photo -->
+                        <div>
+                            <label for="student_photo" class="block text-sm font-medium text-gray-700 mb-1">
+                                Student Photo <span class="text-gray-400 text-xs font-normal">(Optional)</span>
+                            </label>
+                            <div class="flex items-center gap-4">
+                                <div id="photoPreview" class="w-20 h-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50 overflow-hidden">
+                                    <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                    </svg>
+                                </div>
+                                <div class="flex-1">
+                                    <input type="file" name="student_photo" id="student_photo" accept="image/*"
+                                        class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100">
+                                    <p class="mt-1 text-xs text-gray-500">Upload a photo for the student ID card (JPG, PNG, WebP)</p>
+                                </div>
+                            </div>
                         </div>
                         
                         <!-- Class Enrollment (Required) -->
@@ -570,6 +612,26 @@ document.addEventListener('DOMContentLoaded', function() {
     if (phoneInput) {
         phoneInput.addEventListener('input', function() {
             this.value = this.value.replace(/\D/g, '').slice(0, 10);
+        });
+    }
+    
+    // Photo preview
+    const photoInput = document.getElementById('student_photo');
+    const photoPreview = document.getElementById('photoPreview');
+    if (photoInput && photoPreview) {
+        photoInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    photoPreview.innerHTML = `<img src="${e.target.result}" alt="Preview" class="w-full h-full object-cover">`;
+                };
+                reader.readAsDataURL(file);
+            } else {
+                photoPreview.innerHTML = `<svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                </svg>`;
+            }
         });
     }
     

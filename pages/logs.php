@@ -1,16 +1,16 @@
 <?php
 /**
  * System Logs Page
- * View system logs (admin only)
+ * View system logs (Admin: full access, Principal: view-only)
  */
 
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/logger.php';
 
-// Require authentication and admin role
+// Require authentication and admin/principal role
 requireAuth();
-requireRole('admin');
+requireAnyRole(['admin', 'principal']);
 
 // Get filter parameters
 $level = $_GET['level'] ?? null;

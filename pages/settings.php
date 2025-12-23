@@ -25,13 +25,77 @@ $formData = [
     'end_date' => ''
 ];
 
+// Get current school settings
+$schoolSettings = [];
+$settingsSql = "SELECT setting_key, setting_value FROM school_settings WHERE setting_key IN ('school_name', 'school_logo')";
+$settingsResult = dbFetchAll($settingsSql);
+foreach ($settingsResult as $setting) {
+    $schoolSettings[$setting['setting_key']] = $setting['setting_value'];
+}
+$currentSchoolName = $schoolSettings['school_name'] ?? '';
+$currentSchoolLogo = $schoolSettings['school_logo'] ?? '';
+
 // Handle form submissions
 if (isPost()) {
     verifyCsrf();
     
     $action = $_POST['action'] ?? '';
     
-    if ($action === 'create_school_year') {
+    if ($action === 'update_school_settings') {
+        $newSchoolName = sanitizeString($_POST['school_name'] ?? '');
+        
+        // Handle logo upload
+        $newSchoolLogo = $currentSchoolLogo;
+        if (isset($_FILES['school_logo']) && $_FILES['school_logo']['error'] === UPLOAD_ERR_OK) {
+            $uploadDir = __DIR__ . '/../storage/uploads/';
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+            
+            $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            $fileType = $_FILES['school_logo']['type'];
+            
+            if (in_array($fileType, $allowedTypes)) {
+                $extension = pathinfo($_FILES['school_logo']['name'], PATHINFO_EXTENSION);
+                $filename = 'school_logo_' . time() . '.' . $extension;
+                $filepath = $uploadDir . $filename;
+                
+                if (move_uploaded_file($_FILES['school_logo']['tmp_name'], $filepath)) {
+                    // Delete old logo if exists
+                    if ($currentSchoolLogo && file_exists(__DIR__ . '/../' . $currentSchoolLogo)) {
+                        @unlink(__DIR__ . '/../' . $currentSchoolLogo);
+                    }
+                    $newSchoolLogo = 'storage/uploads/' . $filename;
+                } else {
+                    $errors[] = 'Failed to upload logo file.';
+                }
+            } else {
+                $errors[] = 'Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image.';
+            }
+        }
+        
+        if (empty($errors)) {
+            // Update or insert school_name
+            $existingName = dbFetchOne("SELECT id FROM school_settings WHERE setting_key = 'school_name'");
+            if ($existingName) {
+                dbExecute("UPDATE school_settings SET setting_value = ? WHERE setting_key = 'school_name'", [$newSchoolName]);
+            } else {
+                dbInsert('school_settings', ['setting_key' => 'school_name', 'setting_value' => $newSchoolName]);
+            }
+            
+            // Update or insert school_logo
+            $existingLogo = dbFetchOne("SELECT id FROM school_settings WHERE setting_key = 'school_logo'");
+            if ($existingLogo) {
+                dbExecute("UPDATE school_settings SET setting_value = ? WHERE setting_key = 'school_logo'", [$newSchoolLogo]);
+            } else {
+                dbInsert('school_settings', ['setting_key' => 'school_logo', 'setting_value' => $newSchoolLogo]);
+            }
+            
+            setFlash('success', 'School settings updated successfully.');
+            redirect(config('app_url') . '/pages/settings.php?tab=general');
+        }
+        $activeTab = 'general';
+    } elseif ($action === 'create_school_year') {
         $formData['name'] = sanitizeString($_POST['name'] ?? '');
         $formData['start_date'] = sanitizeString($_POST['start_date'] ?? '');
         $formData['end_date'] = sanitizeString($_POST['end_date'] ?? '');
@@ -314,12 +378,79 @@ $pageTitle = 'Settings';
                 <?php elseif ($activeTab === 'general'): ?>
                     <!-- General Settings Tab -->
                     <div class="max-w-2xl">
-                        <h3 class="text-lg font-semibold text-gray-900 mb-4">General Settings</h3>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">School Settings</h3>
+                        
+                        <form method="POST" action="" enctype="multipart/form-data" class="space-y-6">
+                            <?php echo csrfField(); ?>
+                            <input type="hidden" name="action" value="update_school_settings">
+                            
+                            <div class="bg-gray-50 rounded-xl p-6 space-y-6">
+                                <!-- School Name -->
+                                <div>
+                                    <label for="school_name" class="block text-sm font-medium text-gray-700 mb-2">
+                                        School Name
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        id="school_name" 
+                                        name="school_name" 
+                                        value="<?php echo e($currentSchoolName); ?>"
+                                        placeholder="Enter school name"
+                                        class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                                    >
+                                    <p class="mt-1 text-xs text-gray-500">This name will appear on generated ID cards.</p>
+                                </div>
+                                
+                                <!-- School Logo -->
+                                <div>
+                                    <label for="school_logo" class="block text-sm font-medium text-gray-700 mb-2">
+                                        School Logo
+                                    </label>
+                                    
+                                    <?php if ($currentSchoolLogo): ?>
+                                        <div class="mb-4 flex items-center gap-4">
+                                            <div class="w-20 h-20 border-2 border-gray-200 rounded-xl overflow-hidden bg-white flex items-center justify-center">
+                                                <img src="<?php echo config('app_url') . '/' . e($currentSchoolLogo); ?>" alt="Current Logo" class="max-w-full max-h-full object-contain">
+                                            </div>
+                                            <div>
+                                                <p class="text-sm text-gray-600">Current logo</p>
+                                                <p class="text-xs text-gray-400"><?php echo e($currentSchoolLogo); ?></p>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
+                                    
+                                    <div class="flex items-center justify-center w-full">
+                                        <label for="school_logo" class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-white hover:bg-gray-50 transition-colors">
+                                            <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                                                <svg class="w-8 h-8 mb-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                                                </svg>
+                                                <p class="mb-2 text-sm text-gray-500"><span class="font-semibold">Click to upload</span> or drag and drop</p>
+                                                <p class="text-xs text-gray-400">PNG, JPG, GIF or WebP</p>
+                                            </div>
+                                            <input id="school_logo" name="school_logo" type="file" class="hidden" accept="image/jpeg,image/png,image/gif,image/webp">
+                                        </label>
+                                    </div>
+                                    <p class="mt-1 text-xs text-gray-500">This logo will appear on generated ID cards.</p>
+                                </div>
+                                
+                                <button 
+                                    type="submit" 
+                                    class="w-full px-4 py-2.5 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700 transition-colors shadow-sm"
+                                >
+                                    <svg class="w-5 h-5 inline-block mr-2 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                    </svg>
+                                    Save School Settings
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <!-- System Info -->
+                        <h3 class="text-lg font-semibold text-gray-900 mt-8 mb-4">System Information</h3>
                         
                         <div class="bg-gray-50 rounded-xl p-6">
-                            <p class="text-gray-500 text-sm">General settings will be available in a future update.</p>
-                            
-                            <div class="mt-6 space-y-4">
+                            <div class="space-y-4">
                                 <div class="flex items-center justify-between py-3 border-b border-gray-200">
                                     <div>
                                         <p class="text-sm font-medium text-gray-900">Application Name</p>

@@ -101,16 +101,54 @@ if (isPost()) {
                 $barcodePath = regenerateStudentBarcode($formData['lrn'], $student['barcode_path']);
             }
             
+            // Handle photo upload/removal (no file size limit)
+            $photoPath = $student['photo_path'] ?? null;
+            
+            // Check if user wants to remove photo
+            if (isset($_POST['remove_photo']) && $_POST['remove_photo'] == '1') {
+                // Delete old photo file
+                if ($photoPath && file_exists(__DIR__ . '/../' . $photoPath)) {
+                    @unlink(__DIR__ . '/../' . $photoPath);
+                }
+                $photoPath = null;
+            }
+            
+            // Handle new photo upload
+            if (isset($_FILES['student_photo']) && $_FILES['student_photo']['error'] === UPLOAD_ERR_OK) {
+                $uploadDir = __DIR__ . '/../storage/photos/';
+                if (!is_dir($uploadDir)) {
+                    mkdir($uploadDir, 0755, true);
+                }
+                
+                $fileInfo = pathinfo($_FILES['student_photo']['name']);
+                $extension = strtolower($fileInfo['extension'] ?? 'jpg');
+                $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+                
+                if (in_array($extension, $allowedExtensions)) {
+                    // Delete old photo if exists
+                    if ($photoPath && file_exists(__DIR__ . '/../' . $photoPath)) {
+                        @unlink(__DIR__ . '/../' . $photoPath);
+                    }
+                    
+                    $newFilename = 'student_' . $studentId . '_' . time() . '.' . $extension;
+                    $targetPath = $uploadDir . $newFilename;
+                    
+                    if (move_uploaded_file($_FILES['student_photo']['tmp_name'], $targetPath)) {
+                        $photoPath = 'storage/photos/' . $newFilename;
+                    }
+                }
+            }
+            
             // Note: class/section now managed via student_classes -> classes relationship
             $updateSql = "UPDATE students SET
                             student_id = ?, lrn = ?, first_name = ?, last_name = ?,
-                            barcode_path = ?, parent_name = ?, parent_phone = ?, parent_email = ?,
+                            barcode_path = ?, photo_path = ?, parent_name = ?, parent_phone = ?, parent_email = ?,
                             address = ?, date_of_birth = ?, is_active = ?, updated_at = NOW()
                           WHERE id = ?";
             
             $params = [
                 $formData['lrn'], $formData['lrn'], $formData['first_name'], $formData['last_name'],
-                $barcodePath, $formData['parent_name'],
+                $barcodePath, $photoPath, $formData['parent_name'],
                 $formData['parent_phone'], $formData['parent_email'], $formData['address'],
                 $formData['date_of_birth'] ?: null, $formData['is_active'], $studentId
             ];
@@ -171,7 +209,7 @@ $currentUser = getCurrentUser();
             </div>
         <?php endif; ?>
 
-        <form method="POST" action="" class="bg-white rounded-xl border border-gray-100 p-6">
+        <form method="POST" action="" enctype="multipart/form-data" class="bg-white rounded-xl border border-gray-100 p-6">
             <?php echo csrfField(); ?>
             
             <div class="space-y-8">
@@ -220,6 +258,41 @@ $currentUser = getCurrentUser();
                             <input type="date" name="date_of_birth" id="date_of_birth"
                                 value="<?php echo e($formData['date_of_birth'] ?? ''); ?>"
                                 class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500">
+                        </div>
+                        
+                        <!-- Student Photo -->
+                        <div>
+                            <label for="student_photo" class="block text-sm font-medium text-gray-700 mb-1">
+                                Student Photo <span class="text-gray-400 text-xs font-normal">(Optional)</span>
+                            </label>
+                            <div class="flex items-center gap-4">
+                                <div id="photoPreview" class="w-20 h-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50 overflow-hidden">
+                                    <?php if (!empty($student['photo_path']) && file_exists(__DIR__ . '/../' . $student['photo_path'])): ?>
+                                        <img src="<?php echo config('app_url') . '/' . e($student['photo_path']); ?>" alt="Current Photo" class="w-full h-full object-cover">
+                                    <?php else: ?>
+                                        <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                        </svg>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="flex-1">
+                                    <input type="file" name="student_photo" id="student_photo" accept="image/*"
+                                        class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100">
+                                    <p class="mt-1 text-xs text-gray-500">
+                                        <?php if (!empty($student['photo_path'])): ?>
+                                            Upload a new photo to replace the current one
+                                        <?php else: ?>
+                                            Upload a photo for the student ID card (JPG, PNG, WebP)
+                                        <?php endif; ?>
+                                    </p>
+                                    <?php if (!empty($student['photo_path'])): ?>
+                                        <label class="inline-flex items-center mt-2">
+                                            <input type="checkbox" name="remove_photo" value="1" class="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded">
+                                            <span class="ml-2 text-xs text-red-600">Remove current photo</span>
+                                        </label>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
                         </div>
                         
                         <!-- Note: Class/Section is managed via Class Enrollment (see student-view.php) -->
@@ -440,6 +513,39 @@ document.addEventListener('DOMContentLoaded', function() {
     if (phoneInput) {
         phoneInput.addEventListener('input', function() {
             this.value = this.value.replace(/\D/g, '').slice(0, 10);
+        });
+    }
+    
+    // Photo preview
+    const photoInput = document.getElementById('student_photo');
+    const photoPreview = document.getElementById('photoPreview');
+    const removePhotoCheckbox = document.querySelector('input[name="remove_photo"]');
+    
+    if (photoInput && photoPreview) {
+        photoInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    photoPreview.innerHTML = `<img src="${e.target.result}" alt="Preview" class="w-full h-full object-cover">`;
+                };
+                reader.readAsDataURL(file);
+                // Uncheck remove photo if selecting new photo
+                if (removePhotoCheckbox) removePhotoCheckbox.checked = false;
+            }
+        });
+    }
+    
+    // Handle remove photo checkbox
+    if (removePhotoCheckbox && photoPreview) {
+        removePhotoCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                photoPreview.innerHTML = `<svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                </svg>`;
+                // Clear file input
+                if (photoInput) photoInput.value = '';
+            }
         });
     }
     

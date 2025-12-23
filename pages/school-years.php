@@ -1,7 +1,7 @@
 <?php
 /**
  * School Years Management Page
- * Admin role required
+ * Admin: Full access | Principal: View-only
  */
 
 require_once __DIR__ . '/../config/config.php';
@@ -12,13 +12,14 @@ require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/schoolyear.php';
 require_once __DIR__ . '/../includes/placement.php';
 
-requireRole('admin');
+requireAnyRole(['admin', 'principal']);
 
 $errors = [];
 $currentUser = getCurrentUser();
+$isViewOnly = isPrincipal(); // Principal has view-only access
 
-// Handle form submissions
-if (isPost()) {
+// Handle form submissions (Admin only)
+if (isPost() && !$isViewOnly) {
     verifyCsrf();
     $action = $_POST['action'] ?? '';
     
@@ -84,14 +85,16 @@ $csrfToken = generateCsrfToken();
             <div class="flex justify-between items-center">
                 <div>
                     <h1 class="text-3xl font-semibold text-gray-900 tracking-tight">School Years</h1>
-                    <p class="text-gray-500 mt-1">Manage academic years and enrollment periods</p>
+                    <p class="text-gray-500 mt-1"><?php echo $isViewOnly ? 'View academic years and enrollment periods' : 'Manage academic years and enrollment periods'; ?></p>
                 </div>
+                <?php if (!$isViewOnly): ?>
                 <button onclick="openCreateModal()" class="inline-flex items-center px-4 py-2.5 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700 transition-colors shadow-sm">
                     <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                     </svg>
                     New School Year
                 </button>
+                <?php endif; ?>
             </div>
         </div>
         
@@ -133,9 +136,11 @@ $csrfToken = generateCsrfToken();
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                                 </svg>
                                 <p class="mt-2 text-sm text-gray-500">No school years found.</p>
+                                <?php if (!$isViewOnly): ?>
                                 <button onclick="openCreateModal()" class="mt-3 text-violet-600 hover:text-violet-700 text-sm font-medium">
                                     Create your first school year →
                                 </button>
+                                <?php endif; ?>
                             </td>
                         </tr>
                         <?php else: ?>
@@ -195,6 +200,7 @@ $csrfToken = generateCsrfToken();
                                 <?php endif; ?>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right">
+                                <?php if (!$isViewOnly): ?>
                                 <div class="flex items-center justify-end gap-2">
                                     <?php if (!$isActive): ?>
                                     <form method="POST" class="inline">
@@ -230,6 +236,9 @@ $csrfToken = generateCsrfToken();
                                     </form>
                                     <?php endif; ?>
                                 </div>
+                                <?php else: ?>
+                                <span class="text-xs text-gray-400">View only</span>
+                                <?php endif; ?>
                             </td>
                         </tr>
                         <?php endforeach; ?>

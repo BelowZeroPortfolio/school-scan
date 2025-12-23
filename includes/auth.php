@@ -178,7 +178,7 @@ function getCurrentUser() {
 /**
  * Check if user has specific role
  * 
- * @param string $role Role to check (admin, operator, viewer, teacher)
+ * @param string $role Role to check (admin, principal, operator, viewer, teacher)
  * @return bool True if user has role
  */
 function hasRole($role) {
@@ -191,6 +191,14 @@ function hasRole($role) {
     // Admin has access to everything
     if ($userRole === 'admin') {
         return true;
+    }
+    
+    // Principal has access to most things except admin-only features
+    if ($userRole === 'principal') {
+        // Principal can access operator and viewer level features
+        if (in_array($role, ['operator', 'viewer', 'principal'])) {
+            return true;
+        }
     }
     
     // Teacher has operator-level access for attendance and student management
@@ -229,6 +237,32 @@ function isAdmin() {
     }
     
     return ($_SESSION['role'] ?? null) === 'admin';
+}
+
+/**
+ * Check if current user is a principal
+ * 
+ * @return bool True if user has principal role
+ */
+function isPrincipal() {
+    if (!isLoggedIn()) {
+        return false;
+    }
+    
+    return ($_SESSION['role'] ?? null) === 'principal';
+}
+
+/**
+ * Check if current user is admin or principal (school leadership)
+ * 
+ * @return bool True if user has admin or principal role
+ */
+function isSchoolLeadership() {
+    if (!isLoggedIn()) {
+        return false;
+    }
+    
+    return in_array($_SESSION['role'] ?? null, ['admin', 'principal']);
 }
 
 /**
@@ -405,7 +439,7 @@ function getTeacherId() {
 
 /**
  * Check if current user has premium access
- * Admins always have premium access
+ * Admins and Principals always have premium access
  * 
  * @return bool True if user has premium access
  */
@@ -414,8 +448,8 @@ function isPremium() {
         return false;
     }
     
-    // Admins always have premium access
-    if (isAdmin()) {
+    // Admins and Principals always have premium access
+    if (isAdmin() || isPrincipal()) {
         return true;
     }
     

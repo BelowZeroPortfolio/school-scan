@@ -10,6 +10,11 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/attendance.php';
 require_once __DIR__ . '/../includes/schoolyear.php';
 require_once __DIR__ . '/../includes/classes.php';
+require_once __DIR__ . '/../includes/csrf.php';
+require_once __DIR__ . '/../includes/export-csv.php';
+require_once __DIR__ . '/../includes/export-pdf.php';
+require_once __DIR__ . '/../includes/export-excel.php';
+require_once __DIR__ . '/../includes/reports.php';
 
 // Require authentication
 requireAuth();
@@ -22,6 +27,10 @@ $pageTitle = 'Attendance History';
 // Get current user info
 $currentUser = getCurrentUser();
 $userId = $currentUser['id'] ?? null;
+
+// Check premium access for teachers (for export functionality)
+$hasPremiumAccess = isPremium();
+$canExport = isAdmin() || hasRole('operator') || $hasPremiumAccess;
 
 // Get active school year and all school years for filter (Requirements: 9.1)
 $activeSchoolYear = getActiveSchoolYear();
@@ -43,6 +52,113 @@ $selectedClassId = isset($_GET['class_id']) && $_GET['class_id'] !== '' ? (int)$
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $perPage = 50;
 
+// Determine teacher ID for filtering - Admin/Operator see all, Teachers see only their classes
+$teacherIdFilter = null;
+if (isTeacher() && $userId) {
+    $teacherIdFilter = $userId;
+}
+
+// Handle export requests
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'export') {
+    verifyCsrf();
+    
+    // Check export permission
+    if (!$canExport) {
+        setFlash('error', 'Export feature requires a premium subscription. Please contact the administrator.');
+        redirect(config('app_url') . '/pages/attendance-history.php');
+    }
+    
+    $exportFormat = $_POST['export_format'] ?? 'csv';
+    $exportDate = $_POST['export_date'] ?? date('Y-m-d');
+    $exportSchoolYearId = isset($_POST['export_school_year']) && $_POST['export_school_year'] !== '' ? (int)$_POST['export_school_year'] : null;
+    $exportClassId = isset($_POST['export_class_id']) && $_POST['export_class_id'] !== '' ? (int)$_POST['export_class_id'] : null;
+    
+    // Get school year name for filename
+    $schoolYearName = '';
+    if ($exportSchoolYearId) {
+        $sy = getSchoolYearById($exportSchoolYearId);
+        if ($sy) {
+            $schoolYearName = '_' . str_replace('-', '_', $sy['name']);
+        }
+    } elseif ($activeSchoolYear) {
+        $schoolYearName = '_' . str_replace('-', '_', $activeSchoolYear['name']);
+    }
+    
+    // Get attendance data for export
+    $exportData = getAttendanceByDate($exportDate, $exportSchoolYearId, $exportClassId, $teacherIdFilter);
+    
+    // Transform data for export format
+    $exportFormattedData = [];
+    foreach ($exportData as $record) {
+        $exportFormattedData[] = [
+            'attendance_date' => $record['attendance_date'] ?? '',
+            'student_number' => $record['student_code'] ?? $record['student_id'] ?? '',
+            'first_name' => $record['first_name'] ?? '',
+            'last_name' => $record['last_name'] ?? '',
+            'class' => $record['class'] ?? '',
+            'section' => $record['section'] ?? '',
+            'check_in_time' => $record['check_in_time'] ?? '',
+            'check_out_time' => $record['check_out_time'] ?? '',
+            'status' => $record['status'] ?? '',
+            'recorded_by' => $record['recorded_by_name'] ?? 'System'
+        ];
+    }
+    
+    try {
+        $filepath = false;
+        $downloadName = 'attendance_history' . $schoolYearName . '_' . $exportDate;
+        
+        $exportOptions = [
+            'school_year_id' => $exportSchoolYearId,
+            'include_school_year' => false // Already in filename
+        ];
+        
+        switch ($exportFormat) {
+            case 'csv':
+                $filepath = exportToCsv($exportFormattedData, 'attendance_history' . $schoolYearName, $exportOptions);
+                $downloadName .= '.csv';
+                break;
+            case 'pdf':
+                $stats = [
+                    'total_records' => count($exportFormattedData),
+                    'present' => count(array_filter($exportFormattedData, fn($r) => $r['status'] === 'present')),
+                    'late' => count(array_filter($exportFormattedData, fn($r) => $r['status'] === 'late')),
+                    'absent' => count(array_filter($exportFormattedData, fn($r) => $r['status'] === 'absent')),
+                ];
+                $stats['attendance_percentage'] = $stats['total_records'] > 0 
+                    ? round(($stats['present'] + $stats['late']) / $stats['total_records'] * 100, 1) 
+                    : 0;
+                $filepath = exportToPdf($exportFormattedData, $stats, 'attendance_history' . $schoolYearName);
+                $downloadName .= '.pdf';
+                break;
+            case 'excel':
+                $stats = [
+                    'total_records' => count($exportFormattedData),
+                    'present' => count(array_filter($exportFormattedData, fn($r) => $r['status'] === 'present')),
+                    'late' => count(array_filter($exportFormattedData, fn($r) => $r['status'] === 'late')),
+                    'absent' => count(array_filter($exportFormattedData, fn($r) => $r['status'] === 'absent')),
+                ];
+                $filepath = exportToExcel($exportFormattedData, $stats, 'attendance_history' . $schoolYearName);
+                $downloadName .= '.xlsx';
+                break;
+        }
+        
+        if ($filepath && file_exists($filepath)) {
+            if ($exportFormat === 'csv') {
+                downloadCsv($filepath, $downloadName);
+            } elseif ($exportFormat === 'pdf') {
+                downloadPdf($filepath, $downloadName);
+            } elseif ($exportFormat === 'excel') {
+                downloadExcel($filepath, $downloadName);
+            }
+        } else {
+            setFlash('error', 'Failed to generate export file');
+        }
+    } catch (Exception $e) {
+        setFlash('error', 'Export failed: ' . $e->getMessage());
+    }
+}
+
 // Get available classes for filter dropdown (Requirements: 7.2)
 $availableClasses = [];
 if (isTeacher() && $userId) {
@@ -51,12 +167,6 @@ if (isTeacher() && $userId) {
 } else {
     // Admin/Operator see all classes for selected school year
     $availableClasses = getClassesBySchoolYear($selectedSchoolYearId);
-}
-
-// Determine teacher ID for filtering (Requirements: 7.2)
-$teacherIdFilter = null;
-if (isTeacher() && $userId) {
-    $teacherIdFilter = $userId;
 }
 
 // Get attendance records with school year and class filtering (Requirements: 9.1, 9.2)
@@ -173,9 +283,60 @@ $students = dbFetchAll("SELECT student_id, first_name, last_name FROM students W
     <main class="mt-16 bg-gray-50/50 min-h-screen transition-all duration-300 w-full"
           :class="sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'">
         <div class="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
-            <div class="mb-6 sm:mb-8">
-                <h1 class="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight">Attendance History</h1>
-                <p class="text-sm sm:text-base text-gray-500 mt-1">View and filter attendance records</p>
+            <div class="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight">Attendance History</h1>
+                    <p class="text-sm sm:text-base text-gray-500 mt-1">View and filter attendance records</p>
+                </div>
+                
+                <!-- Export Section -->
+                <?php if ($canExport): ?>
+                <div x-data="{ showExport: false }" class="relative">
+                    <button @click="showExport = !showExport" type="button"
+                        class="inline-flex items-center px-4 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-xl hover:bg-orange-600 transition-colors shadow-sm">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        Export
+                        <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    
+                    <!-- Export Dropdown -->
+                    <div x-show="showExport" @click.away="showExport = false" x-transition
+                        class="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-lg border border-gray-100 z-50 p-4">
+                        <form method="POST" action="" class="space-y-3">
+                            <?php echo csrfField(); ?>
+                            <input type="hidden" name="action" value="export">
+                            <input type="hidden" name="export_date" value="<?php echo e($filterDate); ?>">
+                            <input type="hidden" name="export_school_year" value="<?php echo e($selectedSchoolYearId); ?>">
+                            <input type="hidden" name="export_class_id" value="<?php echo e($selectedClassId); ?>">
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Export Format</label>
+                                <select name="export_format" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 focus:border-violet-500">
+                                    <option value="csv">CSV (Excel Compatible)</option>
+                                    <option value="excel">Excel (.xlsx)</option>
+                                    <option value="pdf">PDF</option>
+                                </select>
+                            </div>
+                            
+                            <button type="submit" class="w-full px-4 py-2 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors">
+                                Download Export
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                <?php else: ?>
+                <!-- Subscription Required Notice for Teachers -->
+                <div class="inline-flex items-center px-4 py-2.5 bg-amber-50 text-amber-700 text-sm font-medium rounded-xl border border-amber-200">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    </svg>
+                    Export requires subscription
+                </div>
+                <?php endif; ?>
             </div>
 
             <!-- Filters (Requirements: 9.1, 9.2) -->
@@ -363,34 +524,42 @@ $students = dbFetchAll("SELECT student_id, first_name, last_name FROM students W
                         <table class="min-w-full divide-y divide-gray-100">
                             <thead class="bg-gray-50/50">
                                 <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student ID</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Recorded By</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student ID</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Arrival Date</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Arrival Time</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dismissal Date</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dismissal Time</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Recorded By</th>
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-100">
                                 <?php foreach ($records as $record): ?>
                                     <tr class="hover:bg-gray-50">
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            <?php echo e(formatDate($record['attendance_date'])); ?>
+                                        <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                            <?php echo e($record['student_code'] ?? $record['student_id']); ?>
                                         </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            <?php echo e(formatDateTime($record['check_in_time'], 'h:i A')); ?>
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                            <?php echo e($record['student_id']); ?>
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                                             <?php echo e($record['first_name'] . ' ' . $record['last_name']); ?>
                                         </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            <?php echo e($record['class'] ?? 'N/A'); ?> <?php echo e($record['section'] ?? ''); ?>
+                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            <?php echo e(($record['class'] ?? 'N/A') . ($record['section'] ? ' - ' . $record['section'] : '')); ?>
                                         </td>
-                                        <td class="px-6 py-4 whitespace-nowrap">
+                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            <?php echo e(formatDate($record['attendance_date'])); ?>
+                                        </td>
+                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            <?php echo $record['check_in_time'] ? e(formatDateTime($record['check_in_time'], 'h:i A')) : '<span class="text-gray-400">—</span>'; ?>
+                                        </td>
+                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            <?php echo !empty($record['check_out_time']) ? e(formatDateTime($record['check_out_time'], 'M d, Y')) : '<span class="text-gray-400">—</span>'; ?>
+                                        </td>
+                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            <?php echo !empty($record['check_out_time']) ? e(formatDateTime($record['check_out_time'], 'h:i A')) : '<span class="text-gray-400">—</span>'; ?>
+                                        </td>
+                                        <td class="px-4 py-4 whitespace-nowrap">
                                             <?php
                                             $statusColors = [
                                                 'present' => 'bg-green-100 text-green-800',
@@ -403,7 +572,7 @@ $students = dbFetchAll("SELECT student_id, first_name, last_name FROM students W
                                                 <?php echo e(ucfirst($record['status'])); ?>
                                             </span>
                                         </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                                             <?php echo e($record['recorded_by_name'] ?? 'System'); ?>
                                         </td>
                                     </tr>

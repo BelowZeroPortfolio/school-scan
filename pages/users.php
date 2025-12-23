@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'Password must be at least 6 characters.';
             } elseif ($password !== $confirmPassword) {
                 $error = 'Passwords do not match.';
-            } elseif (!in_array($role, ['admin', 'operator', 'viewer', 'teacher'])) {
+            } elseif (!in_array($role, ['admin', 'principal', 'operator', 'viewer', 'teacher'])) {
                 $error = 'Invalid role selected.';
             } else {
                 // Check if username exists
@@ -230,6 +230,7 @@ $csrfToken = generateCsrfToken();
                     <select name="role" id="filter_role" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
                         <option value="">All Roles</option>
                         <option value="admin" <?php echo $roleFilter === 'admin' ? 'selected' : ''; ?>>Admin</option>
+                        <option value="principal" <?php echo $roleFilter === 'principal' ? 'selected' : ''; ?>>Principal/Head</option>
                         <option value="teacher" <?php echo $roleFilter === 'teacher' ? 'selected' : ''; ?>>Teacher</option>
                         <option value="operator" <?php echo $roleFilter === 'operator' ? 'selected' : ''; ?>>Operator</option>
                         <option value="viewer" <?php echo $roleFilter === 'viewer' ? 'selected' : ''; ?>>Viewer</option>
@@ -278,6 +279,7 @@ $csrfToken = generateCsrfToken();
                                 <?php
                                 $roleColors = [
                                     'admin' => 'bg-red-50 text-red-700 border-red-200',
+                                    'principal' => 'bg-amber-50 text-amber-700 border-amber-200',
                                     'teacher' => 'bg-violet-50 text-violet-700 border-violet-200',
                                     'operator' => 'bg-blue-50 text-blue-700 border-blue-200',
                                     'viewer' => 'bg-gray-50 text-gray-700 border-gray-200'
@@ -299,7 +301,7 @@ $csrfToken = generateCsrfToken();
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border <?php echo $roleColor; ?>">
-                                            <?php echo ucfirst($user['role']); ?>
+                                            <?php echo $user['role'] === 'principal' ? 'Principal/Head' : ucfirst($user['role']); ?>
                                         </span>
                                     </td>
                                     <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap">
@@ -433,6 +435,7 @@ $csrfToken = generateCsrfToken();
                                 <option value="viewer">Viewer</option>
                                 <option value="operator">Operator</option>
                                 <option value="teacher">Teacher</option>
+                                <option value="principal">Principal/Head</option>
                                 <option value="admin">Admin</option>
                             </select>
                         </div>

@@ -338,13 +338,15 @@ function getTeacherStudents(int $teacherId, ?int $schoolYearId = null): array
     
     $sql = "SELECT DISTINCT s.id, s.student_id AS student_code, s.lrn, s.first_name, s.last_name, 
                    s.date_of_birth, s.parent_name, s.parent_phone, s.parent_email, s.is_active,
-                   c.id AS class_id, c.grade_level, c.section,
+                   c.id AS class_id, c.grade_level, c.section AS class_section,
+                   t.full_name AS teacher_name,
                    sy.name AS school_year_name,
                    sc.enrolled_at
             FROM students s
             JOIN student_classes sc ON s.id = sc.student_id
             JOIN classes c ON sc.class_id = c.id
             JOIN school_years sy ON c.school_year_id = sy.id
+            LEFT JOIN users t ON c.teacher_id = t.id
             WHERE c.teacher_id = ? AND c.school_year_id = ? 
                   AND sc.is_active = 1 AND s.is_active = 1 AND c.is_active = 1
             ORDER BY c.grade_level, c.section, s.last_name, s.first_name";

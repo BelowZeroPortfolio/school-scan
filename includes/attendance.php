@@ -159,28 +159,26 @@ function getAttendanceByDate($date, ?int $schoolYearId = null, ?int $classId = n
             $params[] = $schoolYearId;
         }
         
-        // Build JOIN clause based on filters
+        // Build JOIN clause - always join with classes to get class info
         $joinClause = "INNER JOIN students s ON a.student_id = s.id
-                       LEFT JOIN users u ON a.recorded_by = u.id";
+                       LEFT JOIN users u ON a.recorded_by = u.id
+                       LEFT JOIN student_classes sc ON s.id = sc.student_id AND sc.is_active = 1
+                       LEFT JOIN classes c ON sc.class_id = c.id AND c.is_active = 1";
         
-        // Add class/teacher filtering via student_classes
-        if ($classId !== null || $teacherId !== null) {
-            $joinClause .= " LEFT JOIN student_classes sc ON s.id = sc.student_id AND sc.is_active = 1
-                             LEFT JOIN classes c ON sc.class_id = c.id AND c.is_active = 1";
-            
-            if ($schoolYearId !== null) {
-                $joinClause .= " AND c.school_year_id = " . (int)$schoolYearId;
-            }
-            
-            if ($classId !== null) {
-                $whereConditions[] = 'c.id = ?';
-                $params[] = $classId;
-            }
-            
-            if ($teacherId !== null) {
-                $whereConditions[] = 'c.teacher_id = ?';
-                $params[] = $teacherId;
-            }
+        // Add school year filter for classes
+        if ($schoolYearId !== null) {
+            $joinClause .= " AND c.school_year_id = " . (int)$schoolYearId;
+        }
+        
+        // Add class/teacher filtering
+        if ($classId !== null) {
+            $whereConditions[] = 'c.id = ?';
+            $params[] = $classId;
+        }
+        
+        if ($teacherId !== null) {
+            $whereConditions[] = 'c.teacher_id = ?';
+            $params[] = $teacherId;
         }
         
         $whereClause = implode(' AND ', $whereConditions);

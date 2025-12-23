@@ -1,378 +1,278 @@
 <?php
 /**
  * PDF Export Functions
- * Export attendance reports to PDF format using TCPDF
- * 
- * Requirements: 8.2, 8.3
+ * Uses TCPDF library for PDF generation
  */
 
-// require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/logger.php';
-require_once __DIR__ . '/reports.php';
-
-// use TCPDF;
+// Only load TCPDF if vendor autoload exists
+$autoloadPath = __DIR__ . '/../vendor/autoload.php';
+if (file_exists($autoloadPath)) {
+    require_once $autoloadPath;
+}
 
 /**
- * Export report data to PDF
+ * Export attendance data to PDF
  * 
- * @param array $data Report data
- * @param array $stats Report statistics
- * @param string $filename Output filename (without extension)
- * @param array $options Export options
- *   - school_year_id: School year ID for filename
- *   - school_year_name: School year name for header
- *   - include_school_year: Whether to include school year in filename (default: true)
- * @return string|false File path on success, false on failure
- * 
- * Requirements: 8.2, 8.3
+ * @param array $data Attendance records
+ * @param array $stats Statistics array
+ * @param string $filename Base filename without extension
+ * @return string|false Path to generated file or false on failure
  */
-function exportToPdf($data, $stats = [], $filename = 'attendance_report', $options = []) {
+function exportToPdf($data, $stats = [], $filename = 'attendance_report') {
+    // Check if TCPDF is available
+    if (!class_exists('TCPDF')) {
+        error_log('PDF Export Error: TCPDF library not installed. Run: composer install');
+        return false;
+    }
+    
     try {
-        // Ensure storage directory exists
-        $exportDir = __DIR__ . '/../storage/exports';
-        if (!is_dir($exportDir)) {
-            mkdir($exportDir, 0755, true);
-        }
-        
-        // Build filename with school year if enabled (Requirements: 8.3)
-        $includeSchoolYear = $options['include_school_year'] ?? true;
-        if ($includeSchoolYear) {
-            $schoolYearId = $options['school_year_id'] ?? ($stats['school_year_id'] ?? null);
-            $filename = buildExportFilename($filename, $schoolYearId);
-        }
-        
-        // Generate unique filename
-        $timestamp = date('Y-m-d_His');
-        $filepath = $exportDir . '/' . $filename . '_' . $timestamp . '.pdf';
-        
         // Create new PDF document
-        $pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
+        $pdf = new TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
         
         // Set document information
         $pdf->SetCreator('Attendance System');
-        $pdf->SetAuthor('Attendance System');
+        $pdf->SetAuthor('School Administration');
         $pdf->SetTitle('Attendance Report');
-        $pdf->SetSubject('Attendance Report');
+        $pdf->SetSubject('Attendance Records');
         
         // Remove default header/footer
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
         
         // Set margins
-        $pdf->SetMargins(15, 15, 15);
-        $pdf->SetAutoPageBreak(true, 15);
+        $pdf->SetMargins(10, 10, 10);
+        $pdf->SetAutoPageBreak(true, 10);
         
         // Add a page
-        $pdf->AddPage();
-        
-        // Set font
-        $pdf->SetFont('helvetica', '', 10);
+        $pdf->AddPage('L'); // Landscape for better table fit
         
         // Title
         $pdf->SetFont('helvetica', 'B', 16);
         $pdf->Cell(0, 10, 'Attendance Report', 0, 1, 'C');
-        $pdf->Ln(5);
-        
-        // Report info
         $pdf->SetFont('helvetica', '', 10);
-        $pdf->Cell(0, 6, 'Generated: ' . date('Y-m-d H:i:s'), 0, 1);
-        
-        // School year info (Requirements: 8.3)
-        $schoolYearName = $options['school_year_name'] ?? ($stats['school_year_name'] ?? null);
-        if (!$schoolYearName && isset($options['school_year_id'])) {
-            $schoolYearName = getReportSchoolYearName($options['school_year_id']);
-        }
-        if ($schoolYearName) {
-            $pdf->Cell(0, 6, 'School Year: ' . $schoolYearName, 0, 1);
-        }
-        
-        if (!empty($stats['date_range']['start']) && !empty($stats['date_range']['end'])) {
-            $pdf->Cell(0, 6, 'Period: ' . $stats['date_range']['start'] . ' to ' . $stats['date_range']['end'], 0, 1);
-        }
-        
+        $pdf->Cell(0, 5, 'Generated: ' . date('Y-m-d H:i:s'), 0, 1, 'C');
         $pdf->Ln(5);
         
-        // Statistics summary
+        // Statistics if provided
         if (!empty($stats)) {
-            $pdf->SetFont('helvetica', 'B', 12);
-            $pdf->Cell(0, 8, 'Summary Statistics', 0, 1);
+            $pdf->SetFont('helvetica', 'B', 11);
+            $pdf->Cell(0, 8, 'Summary Statistics', 0, 1, 'L');
             $pdf->SetFont('helvetica', '', 10);
             
-            $pdf->Cell(60, 6, 'Total Records:', 0, 0);
-            $pdf->Cell(0, 6, $stats['total_records'] ?? 0, 0, 1);
-            
-            $pdf->Cell(60, 6, 'Present:', 0, 0);
-            $pdf->Cell(0, 6, $stats['present'] ?? 0, 0, 1);
-            
-            $pdf->Cell(60, 6, 'Late:', 0, 0);
-            $pdf->Cell(0, 6, $stats['late'] ?? 0, 0, 1);
-            
-            $pdf->Cell(60, 6, 'Absent:', 0, 0);
-            $pdf->Cell(0, 6, $stats['absent'] ?? 0, 0, 1);
-            
-            $pdf->Cell(60, 6, 'Attendance Percentage:', 0, 0);
-            $pdf->Cell(0, 6, ($stats['attendance_percentage'] ?? 0) . '%', 0, 1);
-            
+            $statsText = sprintf(
+                'Total Records: %d | Present: %d | Late: %d | Absent: %d | Attendance Rate: %.1f%%',
+                $stats['total_records'] ?? 0,
+                $stats['present'] ?? 0,
+                $stats['late'] ?? 0,
+                $stats['absent'] ?? 0,
+                $stats['attendance_percentage'] ?? 0
+            );
+            $pdf->Cell(0, 6, $statsText, 0, 1, 'L');
             $pdf->Ln(5);
         }
         
-        // Attendance records table
-        if (!empty($data)) {
-            $pdf->SetFont('helvetica', 'B', 12);
-            $pdf->Cell(0, 8, 'Attendance Records', 0, 1);
-            
-            // Table header
-            $pdf->SetFont('helvetica', 'B', 8);
-            $pdf->SetFillColor(139, 92, 246); // Purple
-            $pdf->SetTextColor(255, 255, 255);
-            
-            $pdf->Cell(25, 7, 'Date', 1, 0, 'C', true);
-            $pdf->Cell(25, 7, 'Student ID', 1, 0, 'C', true);
-            $pdf->Cell(35, 7, 'Name', 1, 0, 'C', true);
-            $pdf->Cell(20, 7, 'Class', 1, 0, 'C', true);
-            $pdf->Cell(30, 7, 'Time', 1, 0, 'C', true);
-            $pdf->Cell(20, 7, 'Status', 1, 1, 'C', true);
-            
-            // Table data
-            $pdf->SetFont('helvetica', '', 8);
-            $pdf->SetTextColor(0, 0, 0);
-            $pdf->SetFillColor(245, 245, 245);
-            
-            $fill = false;
-            foreach ($data as $row) {
-                // Check if we need a new page
-                if ($pdf->GetY() > 260) {
-                    $pdf->AddPage();
-                    
-                    // Repeat header on new page
-                    $pdf->SetFont('helvetica', 'B', 8);
-                    $pdf->SetFillColor(139, 92, 246);
-                    $pdf->SetTextColor(255, 255, 255);
-                    
-                    $pdf->Cell(25, 7, 'Date', 1, 0, 'C', true);
-                    $pdf->Cell(25, 7, 'Student ID', 1, 0, 'C', true);
-                    $pdf->Cell(35, 7, 'Name', 1, 0, 'C', true);
-                    $pdf->Cell(20, 7, 'Class', 1, 0, 'C', true);
-                    $pdf->Cell(30, 7, 'Time', 1, 0, 'C', true);
-                    $pdf->Cell(20, 7, 'Status', 1, 1, 'C', true);
-                    
-                    $pdf->SetFont('helvetica', '', 8);
-                    $pdf->SetTextColor(0, 0, 0);
-                }
-                
-                $name = ($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '');
-                $classValue = $row['class_grade'] ?? $row['class'] ?? '';
-                $sectionValue = $row['class_section'] ?? $row['section'] ?? '';
-                $class = $classValue . ($sectionValue ? ' ' . $sectionValue : '');
-                $time = date('H:i', strtotime($row['check_in_time'] ?? ''));
-                
-                $pdf->Cell(25, 6, $row['attendance_date'] ?? '', 1, 0, 'C', $fill);
-                $pdf->Cell(25, 6, $row['student_number'] ?? '', 1, 0, 'C', $fill);
-                $pdf->Cell(35, 6, substr($name, 0, 20), 1, 0, 'L', $fill);
-                $pdf->Cell(20, 6, $class, 1, 0, 'C', $fill);
-                $pdf->Cell(30, 6, $time, 1, 0, 'C', $fill);
-                $pdf->Cell(20, 6, ucfirst($row['status'] ?? ''), 1, 1, 'C', $fill);
-                
-                $fill = !$fill;
+        // Table header
+        $pdf->SetFont('helvetica', 'B', 9);
+        $pdf->SetFillColor(139, 92, 246); // Violet
+        $pdf->SetTextColor(255, 255, 255);
+        
+        // Column widths (total ~277 for landscape A4)
+        $colWidths = [25, 45, 35, 30, 25, 25, 25, 25, 20, 30];
+        $headers = ['Student ID', 'Name', 'Class', 'Arrival Date', 'Arrival Time', 'Dismissal Date', 'Dismissal Time', 'Status', 'Recorded By'];
+        
+        // Adjust widths based on actual columns
+        $colWidths = [28, 50, 35, 28, 25, 28, 25, 22, 36];
+        
+        foreach ($headers as $i => $header) {
+            $pdf->Cell($colWidths[$i], 7, $header, 1, 0, 'C', true);
+        }
+        $pdf->Ln();
+        
+        // Table data
+        $pdf->SetFont('helvetica', '', 8);
+        $pdf->SetTextColor(0, 0, 0);
+        $fill = false;
+        
+        foreach ($data as $row) {
+            if ($fill) {
+                $pdf->SetFillColor(245, 245, 245);
+            } else {
+                $pdf->SetFillColor(255, 255, 255);
             }
+            
+            // Format the data
+            $studentId = $row['student_number'] ?? $row['student_id'] ?? '';
+            $name = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
+            $class = ($row['class'] ?? '') . ($row['section'] ? ' - ' . $row['section'] : '');
+            
+            // Parse arrival date/time
+            $arrivalDate = '';
+            $arrivalTime = '';
+            if (!empty($row['check_in_time'])) {
+                if (strpos($row['check_in_time'], ' ') !== false) {
+                    list($arrivalDate, $arrivalTime) = explode(' ', $row['check_in_time']);
+                } else {
+                    $arrivalTime = $row['check_in_time'];
+                    $arrivalDate = $row['attendance_date'] ?? '';
+                }
+            }
+            
+            // Parse dismissal date/time
+            $dismissalDate = '';
+            $dismissalTime = '';
+            if (!empty($row['check_out_time'])) {
+                if (strpos($row['check_out_time'], ' ') !== false) {
+                    list($dismissalDate, $dismissalTime) = explode(' ', $row['check_out_time']);
+                } else {
+                    $dismissalTime = $row['check_out_time'];
+                    $dismissalDate = $row['attendance_date'] ?? '';
+                }
+            }
+            
+            $status = ucfirst($row['status'] ?? '');
+            $recordedBy = $row['recorded_by'] ?? $row['recorded_by_name'] ?? 'System';
+            
+            $pdf->Cell($colWidths[0], 6, $studentId, 1, 0, 'L', $fill);
+            $pdf->Cell($colWidths[1], 6, $name, 1, 0, 'L', $fill);
+            $pdf->Cell($colWidths[2], 6, $class, 1, 0, 'L', $fill);
+            $pdf->Cell($colWidths[3], 6, $arrivalDate, 1, 0, 'C', $fill);
+            $pdf->Cell($colWidths[4], 6, $arrivalTime, 1, 0, 'C', $fill);
+            $pdf->Cell($colWidths[5], 6, $dismissalDate, 1, 0, 'C', $fill);
+            $pdf->Cell($colWidths[6], 6, $dismissalTime, 1, 0, 'C', $fill);
+            $pdf->Cell($colWidths[7], 6, $status, 1, 0, 'C', $fill);
+            $pdf->Cell($colWidths[8], 6, $recordedBy, 1, 0, 'L', $fill);
+            $pdf->Ln();
+            
+            $fill = !$fill;
         }
         
-        // Output PDF to file
-        $pdf->Output($filepath, 'F');
-        
-        logInfo('PDF export created', [
-            'filename' => basename($filepath),
-            'record_count' => count($data),
-            'school_year' => $schoolYearName
-        ]);
-        
-        return $filepath;
-    } catch (Exception $e) {
-        logError('PDF export failed: ' . $e->getMessage(), [
-            'filename' => $filename
-        ]);
-        return false;
-    }
-}
-
-/**
- * Export student summary to PDF
- * 
- * @param array $data Student summary data
- * @param string $filename Output filename (without extension)
- * @param array $options Export options
- *   - school_year_id: School year ID for filename
- *   - school_year_name: School year name for header
- *   - include_school_year: Whether to include school year in filename (default: true)
- * @return string|false File path on success, false on failure
- * 
- * Requirements: 8.2, 8.3
- */
-function exportStudentSummaryPdf($data, $filename = 'student_summary', $options = []) {
-    try {
-        // Ensure storage directory exists
+        // Save to file
         $exportDir = __DIR__ . '/../storage/exports';
         if (!is_dir($exportDir)) {
             mkdir($exportDir, 0755, true);
         }
         
-        // Build filename with school year if enabled (Requirements: 8.3)
-        $includeSchoolYear = $options['include_school_year'] ?? true;
-        if ($includeSchoolYear) {
-            $schoolYearId = $options['school_year_id'] ?? null;
-            $filename = buildExportFilename($filename, $schoolYearId);
-        }
-        
-        // Generate unique filename
-        $timestamp = date('Y-m-d_His');
-        $filepath = $exportDir . '/' . $filename . '_' . $timestamp . '.pdf';
-        
-        // Create new PDF document
-        $pdf = new TCPDF('L', 'mm', 'A4', true, 'UTF-8', false); // Landscape
-        
-        // Set document information
-        $pdf->SetCreator('Attendance System');
-        $pdf->SetAuthor('Attendance System');
-        $pdf->SetTitle('Student Attendance Summary');
-        
-        // Remove default header/footer
-        $pdf->setPrintHeader(false);
-        $pdf->setPrintFooter(false);
-        
-        // Set margins
-        $pdf->SetMargins(15, 15, 15);
-        $pdf->SetAutoPageBreak(true, 15);
-        
-        // Add a page
-        $pdf->AddPage();
-        
-        // Title
-        $pdf->SetFont('helvetica', 'B', 16);
-        $pdf->Cell(0, 10, 'Student Attendance Summary', 0, 1, 'C');
-        $pdf->Ln(5);
-        
-        // Report info
-        $pdf->SetFont('helvetica', '', 10);
-        $pdf->Cell(0, 6, 'Generated: ' . date('Y-m-d H:i:s'), 0, 1);
-        
-        // School year info (Requirements: 8.3)
-        $schoolYearName = $options['school_year_name'] ?? null;
-        if (!$schoolYearName && isset($options['school_year_id'])) {
-            $schoolYearName = getReportSchoolYearName($options['school_year_id']);
-        }
-        if ($schoolYearName) {
-            $pdf->Cell(0, 6, 'School Year: ' . $schoolYearName, 0, 1);
-        }
-        
-        $pdf->Ln(5);
-        
-        // Table header
-        $pdf->SetFont('helvetica', 'B', 9);
-        $pdf->SetFillColor(139, 92, 246); // Purple
-        $pdf->SetTextColor(255, 255, 255);
-        
-        $pdf->Cell(30, 7, 'Student ID', 1, 0, 'C', true);
-        $pdf->Cell(50, 7, 'Name', 1, 0, 'C', true);
-        $pdf->Cell(25, 7, 'Class', 1, 0, 'C', true);
-        $pdf->Cell(25, 7, 'Present', 1, 0, 'C', true);
-        $pdf->Cell(25, 7, 'Late', 1, 0, 'C', true);
-        $pdf->Cell(25, 7, 'Absent', 1, 0, 'C', true);
-        $pdf->Cell(25, 7, 'Total', 1, 0, 'C', true);
-        $pdf->Cell(30, 7, 'Attendance %', 1, 1, 'C', true);
-        
-        // Table data
-        $pdf->SetFont('helvetica', '', 9);
-        $pdf->SetTextColor(0, 0, 0);
-        $pdf->SetFillColor(245, 245, 245);
-        
-        $fill = false;
-        foreach ($data as $row) {
-            // Check if we need a new page
-            if ($pdf->GetY() > 180) {
-                $pdf->AddPage();
-                
-                // Repeat header
-                $pdf->SetFont('helvetica', 'B', 9);
-                $pdf->SetFillColor(139, 92, 246);
-                $pdf->SetTextColor(255, 255, 255);
-                
-                $pdf->Cell(30, 7, 'Student ID', 1, 0, 'C', true);
-                $pdf->Cell(50, 7, 'Name', 1, 0, 'C', true);
-                $pdf->Cell(25, 7, 'Class', 1, 0, 'C', true);
-                $pdf->Cell(25, 7, 'Present', 1, 0, 'C', true);
-                $pdf->Cell(25, 7, 'Late', 1, 0, 'C', true);
-                $pdf->Cell(25, 7, 'Absent', 1, 0, 'C', true);
-                $pdf->Cell(25, 7, 'Total', 1, 0, 'C', true);
-                $pdf->Cell(30, 7, 'Attendance %', 1, 1, 'C', true);
-                
-                $pdf->SetFont('helvetica', '', 9);
-                $pdf->SetTextColor(0, 0, 0);
-            }
-            
-            $name = ($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '');
-            // Use class-based data if available, fall back to legacy
-            $classValue = $row['class_grade'] ?? $row['class'] ?? '';
-            $sectionValue = $row['class_section'] ?? $row['section'] ?? '';
-            $class = $classValue . ($sectionValue ? ' ' . $sectionValue : '');
-            
-            $pdf->Cell(30, 6, $row['student_number'] ?? '', 1, 0, 'C', $fill);
-            $pdf->Cell(50, 6, substr($name, 0, 30), 1, 0, 'L', $fill);
-            $pdf->Cell(25, 6, $class, 1, 0, 'C', $fill);
-            $pdf->Cell(25, 6, $row['present_count'] ?? 0, 1, 0, 'C', $fill);
-            $pdf->Cell(25, 6, $row['late_count'] ?? 0, 1, 0, 'C', $fill);
-            $pdf->Cell(25, 6, $row['absent_count'] ?? 0, 1, 0, 'C', $fill);
-            $pdf->Cell(25, 6, $row['total_records'] ?? 0, 1, 0, 'C', $fill);
-            $pdf->Cell(30, 6, ($row['attendance_percentage'] ?? 0) . '%', 1, 1, 'C', $fill);
-            
-            $fill = !$fill;
-        }
-        
-        // Output PDF to file
+        $filepath = $exportDir . '/' . $filename . '_' . date('Y-m-d_His') . '.pdf';
         $pdf->Output($filepath, 'F');
-        
-        logInfo('Student summary PDF export created', [
-            'filename' => basename($filepath),
-            'record_count' => count($data),
-            'school_year' => $schoolYearName ?? null
-        ]);
         
         return $filepath;
     } catch (Exception $e) {
-        logError('Student summary PDF export failed: ' . $e->getMessage(), [
-            'filename' => $filename
-        ]);
+        error_log('PDF Export Error: ' . $e->getMessage());
         return false;
     }
 }
 
 /**
- * Download PDF file to browser
+ * Export student summary report to PDF
  * 
- * @param string $filepath Full path to PDF file
- * @param string $downloadName Filename for download
- * @return void
+ * @param array $data Student summary data
+ * @param array $filters Applied filters
+ * @param string $filename Base filename
+ * @return string|false Path to generated file or false on failure
  */
-function downloadPdf($filepath, $downloadName = null) {
+function exportStudentSummaryPdf($data, $filters = [], $filename = 'student_summary') {
+    // Check if TCPDF is available
+    if (!class_exists('TCPDF')) {
+        error_log('PDF Export Error: TCPDF library not installed. Run: composer install');
+        return false;
+    }
+    
+    try {
+        $pdf = new TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
+        
+        $pdf->SetCreator('Attendance System');
+        $pdf->SetAuthor('School Administration');
+        $pdf->SetTitle('Student Attendance Summary');
+        
+        $pdf->setPrintHeader(false);
+        $pdf->setPrintFooter(false);
+        $pdf->SetMargins(10, 10, 10);
+        $pdf->SetAutoPageBreak(true, 10);
+        
+        $pdf->AddPage('L');
+        
+        // Title
+        $pdf->SetFont('helvetica', 'B', 16);
+        $pdf->Cell(0, 10, 'Student Attendance Summary', 0, 1, 'C');
+        $pdf->SetFont('helvetica', '', 10);
+        
+        // Date range
+        if (!empty($filters['start_date']) && !empty($filters['end_date'])) {
+            $pdf->Cell(0, 5, 'Period: ' . $filters['start_date'] . ' to ' . $filters['end_date'], 0, 1, 'C');
+        }
+        $pdf->Cell(0, 5, 'Generated: ' . date('Y-m-d H:i:s'), 0, 1, 'C');
+        $pdf->Ln(5);
+        
+        // Table header
+        $pdf->SetFont('helvetica', 'B', 9);
+        $pdf->SetFillColor(139, 92, 246);
+        $pdf->SetTextColor(255, 255, 255);
+        
+        $colWidths = [30, 55, 40, 25, 25, 25, 25, 30, 30];
+        $headers = ['Student ID', 'Name', 'Class', 'Present', 'Late', 'Absent', 'Total', 'Rate (%)', 'Status'];
+        
+        foreach ($headers as $i => $header) {
+            $pdf->Cell($colWidths[$i], 7, $header, 1, 0, 'C', true);
+        }
+        $pdf->Ln();
+        
+        // Data rows
+        $pdf->SetFont('helvetica', '', 8);
+        $pdf->SetTextColor(0, 0, 0);
+        $fill = false;
+        
+        foreach ($data as $row) {
+            $pdf->SetFillColor($fill ? 245 : 255, $fill ? 245 : 255, $fill ? 245 : 255);
+            
+            $pdf->Cell($colWidths[0], 6, $row['student_id'] ?? '', 1, 0, 'L', $fill);
+            $pdf->Cell($colWidths[1], 6, $row['student_name'] ?? '', 1, 0, 'L', $fill);
+            $pdf->Cell($colWidths[2], 6, $row['class'] ?? '', 1, 0, 'L', $fill);
+            $pdf->Cell($colWidths[3], 6, $row['present_count'] ?? 0, 1, 0, 'C', $fill);
+            $pdf->Cell($colWidths[4], 6, $row['late_count'] ?? 0, 1, 0, 'C', $fill);
+            $pdf->Cell($colWidths[5], 6, $row['absent_count'] ?? 0, 1, 0, 'C', $fill);
+            $pdf->Cell($colWidths[6], 6, $row['total_days'] ?? 0, 1, 0, 'C', $fill);
+            $pdf->Cell($colWidths[7], 6, number_format($row['attendance_rate'] ?? 0, 1), 1, 0, 'C', $fill);
+            $pdf->Cell($colWidths[8], 6, $row['status'] ?? '', 1, 0, 'C', $fill);
+            $pdf->Ln();
+            
+            $fill = !$fill;
+        }
+        
+        $exportDir = __DIR__ . '/../storage/exports';
+        if (!is_dir($exportDir)) {
+            mkdir($exportDir, 0755, true);
+        }
+        
+        $filepath = $exportDir . '/' . $filename . '_' . date('Y-m-d_His') . '.pdf';
+        $pdf->Output($filepath, 'F');
+        
+        return $filepath;
+    } catch (Exception $e) {
+        error_log('PDF Export Error: ' . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Download PDF file
+ * 
+ * @param string $filepath Path to PDF file
+ * @param string $downloadName Filename for download
+ */
+function downloadPdf($filepath, $downloadName = 'report.pdf') {
     if (!file_exists($filepath)) {
-        logError('PDF file not found for download', ['filepath' => $filepath]);
-        die('File not found');
+        return false;
     }
     
-    if ($downloadName === null) {
-        $downloadName = basename($filepath);
-    }
-    
-    // Set headers for download
     header('Content-Type: application/pdf');
     header('Content-Disposition: attachment; filename="' . $downloadName . '"');
     header('Content-Length: ' . filesize($filepath));
-    header('Cache-Control: no-cache, must-revalidate');
-    header('Pragma: no-cache');
+    header('Cache-Control: private, max-age=0, must-revalidate');
+    header('Pragma: public');
     
-    // Output file
     readfile($filepath);
     
-    logInfo('PDF file downloaded', ['filename' => $downloadName]);
-    
+    // Clean up
+    unlink($filepath);
     exit;
 }

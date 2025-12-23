@@ -268,10 +268,10 @@ $pageTitle = 'Students';
                                     $classDisplay = '';
                                     $teacherDisplay = '';
                                     if (isset($student['grade_level']) && $student['grade_level']) {
-                                        $classDisplay = $student['grade_level'] . ' - ' . ($student['class_section'] ?? '');
+                                        $classDisplay = $student['grade_level'] . ' - ' . ($student['class_section'] ?? $student['section'] ?? '');
                                         $teacherDisplay = $student['teacher_name'] ?? '';
                                     } else {
-                                        $classDisplay = $student['class'] . ($student['section'] ? ' - ' . $student['section'] : '');
+                                        $classDisplay = ($student['class'] ?? '') . (isset($student['section']) && $student['section'] ? ' - ' . $student['section'] : '');
                                     }
                                     ?>
                                     <tr class="hover:bg-gray-50/50 transition-colors">

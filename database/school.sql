@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Dec 21, 2025 at 12:30 PM
+-- Generation Time: Dec 23, 2025 at 06:12 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -39,6 +39,15 @@ CREATE TABLE `attendance` (
   `notes` text DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+--
+-- Dumping data for table `attendance`
+--
+
+INSERT INTO `attendance` (`id`, `student_id`, `school_year_id`, `attendance_date`, `check_in_time`, `check_out_time`, `status`, `recorded_by`, `notes`) VALUES
+(17, 14, 2, '2025-12-22', '2025-12-22 12:06:44', '2025-12-22 12:07:23', 'present', 4, NULL),
+(18, 14, 2, '2025-12-23', '2025-12-23 04:03:30', '2025-12-23 04:03:59', 'present', 4, NULL),
+(19, 15, 2, '2025-12-23', '2025-12-23 04:03:36', '2025-12-23 04:03:43', 'present', 4, NULL);
+
 -- --------------------------------------------------------
 
 --
@@ -63,7 +72,8 @@ CREATE TABLE `classes` (
 
 INSERT INTO `classes` (`id`, `grade_level`, `section`, `teacher_id`, `school_year_id`, `is_active`, `max_capacity`, `created_at`, `updated_at`) VALUES
 (3, 'Grade 7', 'A', 4, 1, 1, 50, '2025-12-19 07:11:39', '2025-12-19 07:11:39'),
-(4, 'Grade 8', 'A', 5, 2, 1, 50, '2025-12-19 07:13:15', '2025-12-19 07:13:15');
+(4, 'Grade 8', 'A', 5, 2, 1, 50, '2025-12-19 07:13:15', '2025-12-19 07:13:15'),
+(5, 'Grade 11', 'ESL', 4, 2, 1, 50, '2025-12-22 11:59:28', '2025-12-22 11:59:28');
 
 -- --------------------------------------------------------
 
@@ -102,6 +112,27 @@ CREATE TABLE `retry_queue` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `school_settings`
+--
+
+CREATE TABLE `school_settings` (
+  `id` int(11) NOT NULL,
+  `setting_key` varchar(50) NOT NULL,
+  `setting_value` text DEFAULT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `school_settings`
+--
+
+INSERT INTO `school_settings` (`id`, `setting_key`, `setting_value`, `updated_at`) VALUES
+(1, 'school_name', 'SAGAY NATIONAL HIGH SCHOOL', '2025-12-22 10:05:12'),
+(2, 'school_logo', 'storage/uploads/school_logo_1766397912.webp', '2025-12-22 10:05:12');
 
 -- --------------------------------------------------------
 
@@ -153,6 +184,8 @@ INSERT INTO `sessions` (`id`, `user_id`, `ip_address`, `user_agent`, `last_activ
 ('107ughcd5t4oebf5vhl22mf36f', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-16 14:45:10', '2025-12-16 14:45:10'),
 ('84tr4mdd0amds2bjrsh2a31cjg', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-19 07:31:33', '2025-12-19 07:31:33'),
 ('dnqpfrck34kb9aa15l32ks4ka2', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-21 09:58:20', '2025-12-21 09:58:20'),
+('dqb5k4hc408qev0v99s2v91mib', 4, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 04:03:11', '2025-12-23 04:03:11'),
+('duppurm3ogv076rh82is9q3doh', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 05:08:05', '2025-12-23 05:08:05'),
 ('ed1j9i2j85p2qo703dp3e5o634', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-08 13:26:13', '2025-12-08 13:26:13'),
 ('mdf618aj1ikfgda3gqkk5tivb1', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-19 06:00:35', '2025-12-19 06:00:35');
 
@@ -169,6 +202,7 @@ CREATE TABLE `students` (
   `first_name` varchar(50) NOT NULL,
   `last_name` varchar(50) NOT NULL,
   `barcode_path` varchar(255) DEFAULT NULL,
+  `photo_path` varchar(255) DEFAULT NULL COMMENT 'Path to student photo',
   `parent_name` varchar(100) DEFAULT NULL,
   `parent_phone` varchar(20) DEFAULT NULL,
   `parent_email` varchar(100) DEFAULT NULL,
@@ -185,9 +219,14 @@ CREATE TABLE `students` (
 -- Dumping data for table `students`
 --
 
-INSERT INTO `students` (`id`, `student_id`, `lrn`, `first_name`, `last_name`, `barcode_path`, `parent_name`, `parent_phone`, `parent_email`, `address`, `date_of_birth`, `created_at`, `updated_at`, `is_active`, `sms_enabled`, `previous_school`) VALUES
-(9, '117327080031', '117327080031', 'Juans', 'Dela Cruz', 'storage/barcodes/student_117327080031.svg', 'Juanito', '+639871627431', 'carly@gmail.com', 'purok mangingisda, barangay zone 1-a, pulupandan', '2003-03-05', '2025-12-19 07:12:42', '2025-12-21 11:19:55', 1, 0, NULL),
-(10, 'STU-2025-0002', '123123123123', 'Sofia', 'First', 'storage/barcodes/student_123123123123.svg', 'Jullie', '+639192381920', 'pearly@gmail.com', 'purok magsasaka, barangay zone 2, pulupandan', '2002-09-02', '2025-12-19 07:15:40', '2025-12-21 11:07:34', 1, 0, NULL);
+INSERT INTO `students` (`id`, `student_id`, `lrn`, `first_name`, `last_name`, `barcode_path`, `photo_path`, `parent_name`, `parent_phone`, `parent_email`, `address`, `date_of_birth`, `created_at`, `updated_at`, `is_active`, `sms_enabled`, `previous_school`) VALUES
+(9, '117327080031', '117327080031', 'Juans', 'Dela Cruz', 'storage/barcodes/student_117327080031.svg', 'storage/photos/student_9_1766397969.png', 'Juanito', '+639871627431', 'carly@gmail.com', 'purok mangingisda, barangay zone 1-a, pulupandan', '2003-03-05', '2025-12-19 07:12:42', '2025-12-22 11:46:15', 1, 1, NULL),
+(10, 'STU-2025-0002', '123123123123', 'Sofia', 'First', 'storage/barcodes/student_123123123123.svg', NULL, 'Jullie', '+639192381920', 'pearly@gmail.com', 'purok magsasaka, barangay zone 2, pulupandan', '2002-09-02', '2025-12-19 07:15:40', '2025-12-22 11:46:15', 1, 1, NULL),
+(11, 'STU-2025-0003', '117244007448', 'Kenny', 'Jayona', 'storage/barcodes/student_117244007448.svg', NULL, 'sample', '+639876432657', 'sample@gmail.com', 'SAMPLE ADDRESS', '2025-12-22', '2025-12-22 09:42:00', '2025-12-22 11:46:15', 1, 1, NULL),
+(12, 'STU-2025-0004', '123456789123', 'sample', 'sample', 'storage/barcodes/student_123456789123.svg', 'storage/photos/student_12_1766404143.png', 'sample parent', '+639876543219', 'sample@gmail.com', 'sample CITY', '2025-12-22', '2025-12-22 11:49:03', '2025-12-22 11:49:03', 1, 0, NULL),
+(13, 'STU-2025-0005', '123456789098', 'FIRST NAME', 'LAST NAME', 'storage/barcodes/student_123456789098.svg', 'storage/photos/student_13_1766404730.png', 'PARENT', '+639837474747', 'parent@gmail.com', 'sagay city', NULL, '2025-12-22 11:58:50', '2025-12-22 11:58:50', 1, 0, NULL),
+(14, 'STU-2025-0006', '123456765432', 'Palaboy', 'boy', 'storage/barcodes/student_123456765432.svg', 'storage/photos/student_14_1766405067.png', 'sample1', '+639876463228', 'pal@gmail.com', 'cadiz city', '2025-12-22', '2025-12-22 12:04:27', '2025-12-22 12:04:27', 1, 0, NULL),
+(15, 'STU-2025-0007', '117244007441', 'kenny', 'jayona', 'storage/barcodes/student_117244007441.svg', 'storage/photos/student_15_1766462512.png', 'NSOY', '+639876543234', 'parent1@gmail.com', 'MANAPLA CITY', '2025-12-23', '2025-12-23 04:01:52', '2025-12-23 04:01:52', 1, 0, NULL);
 
 -- --------------------------------------------------------
 
@@ -217,7 +256,9 @@ INSERT INTO `student_classes` (`id`, `student_id`, `class_id`, `enrolled_at`, `e
 (8, 9, 3, '2025-12-19 07:12:42', 1, 1, 'regular', 'active', NULL, NULL, NULL),
 (9, 9, 4, '2025-12-21 08:47:16', 1, 1, 'regular', 'active', NULL, NULL, NULL),
 (10, 10, 4, '2025-12-19 07:15:40', 1, 0, 'regular', 'active', NULL, NULL, NULL),
-(11, 10, 3, '2025-12-19 07:32:17', 1, 1, 'regular', 'active', NULL, NULL, NULL);
+(11, 10, 3, '2025-12-19 07:32:17', 1, 1, 'regular', 'active', NULL, NULL, NULL),
+(14, 14, 5, '2025-12-22 12:04:27', 4, 1, 'regular', 'active', NULL, NULL, NULL),
+(15, 15, 5, '2025-12-23 04:01:52', 4, 1, 'repeater', 'active', NULL, NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -255,7 +296,22 @@ INSERT INTO `system_logs` (`id`, `log_level`, `message`, `context`, `user_id`, `
 (14, 'info', 'Placement preview exported', '{\"filename\":\"placement_preview_SY2024_2025_to_SY2025_2026_2025-12-21_100042.csv\",\"record_count\":2,\"source_school_year\":\"2024-2025\",\"target_school_year\":\"2025-2026\"}', 1, '::1', 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36', '2025-12-21 09:00:42'),
 (15, 'info', 'Placement preview downloaded', '{\"filename\":\"placement_preview_SY2024_2025_to_SY2025_2026_2025-12-21_100042.csv\"}', 1, '::1', 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36', '2025-12-21 09:00:42'),
 (16, 'info', 'School year enrollment locked', '{\"school_year_id\":2,\"school_year_name\":\"2025-2026\",\"locked_by\":1}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-21 09:01:20'),
-(17, 'info', 'School year enrollment unlocked', '{\"school_year_id\":2,\"school_year_name\":\"2025-2026\",\"unlocked_by\":1}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-21 09:13:59');
+(17, 'info', 'School year enrollment unlocked', '{\"school_year_id\":2,\"school_year_name\":\"2025-2026\",\"unlocked_by\":1}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-21 09:13:59'),
+(18, 'info', 'CSV export created', '{\"filename\":\"attendance_history_2025_2026_SY2025_2026_2025-12-22_140421.csv\",\"record_count\":1,\"school_year\":null}', 4, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-22 13:04:21'),
+(19, 'info', 'CSV file downloaded', '{\"filename\":\"attendance_history_2025_2026_2025-12-22.csv\"}', 4, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-22 13:04:21'),
+(20, 'error', 'Database query failed: SQLSTATE[42S22]: Column not found: 1054 Unknown column \'c.grade_level\' in \'field list\'', '{\"sql\":\"SELECT DISTINCT a.*, \\r\\n                       s.student_id AS student_code, s.first_name, s.last_name,\\r\\n                       COALESCE(c.grade_level, \'\') AS class, COALESCE(c.section, \'\') AS section,\\r\\n                       u.full_name as recorded_by_name,\\r\\n                       sy.name AS school_year_name\\r\\n                FROM attendance a\\r\\n                INNER JOIN students s ON a.student_id = s.id\\r\\n                       LEFT JOIN users u ON a.recorded_by = u.id\\r\\n                LEFT JOIN school_years sy ON a.school_year_id = sy.id\\r\\n                WHERE a.attendance_date = ? AND a.school_year_id = ?\\r\\n                ORDER BY a.check_in_time DESC\",\"params\":[\"2025-12-23\",2]}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 03:54:18'),
+(21, 'error', 'Failed to get attendance by date: SQLSTATE[42S22]: Column not found: 1054 Unknown column \'c.grade_level\' in \'field list\'', '{\"date\":\"2025-12-23\",\"school_year_id\":2}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 03:54:18'),
+(22, 'info', 'CSV export created', '{\"filename\":\"attendance_history_2025_2026_SY2025_2026_2025-12-23_050446.csv\",\"record_count\":2,\"school_year\":null}', 4, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 04:04:46'),
+(23, 'info', 'CSV file downloaded', '{\"filename\":\"attendance_history_2025_2026_2025-12-23.csv\"}', 4, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 04:04:46'),
+(24, 'info', 'Report generated', '{\"filters\":{\"start_date\":\"2025-11-23\",\"end_date\":\"2025-12-23\",\"school_year_id\":2,\"teacher_id\":4},\"record_count\":3}', 4, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 04:08:08'),
+(25, 'info', 'Report generated', '{\"filters\":{\"start_date\":\"2025-11-23\",\"end_date\":\"2025-12-23\",\"school_year_id\":2,\"teacher_id\":4},\"record_count\":3}', 4, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 04:08:18'),
+(26, 'info', 'CSV export created', '{\"filename\":\"attendance_report_2025_2026_SY2025_2026_2025-12-23_050818.csv\",\"record_count\":3,\"school_year\":null}', 4, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 04:08:18'),
+(27, 'info', 'CSV file downloaded', '{\"filename\":\"attendance_report_2025_2026_2025-12-23.csv\"}', 4, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 04:08:18'),
+(28, 'info', 'Report generated', '{\"filters\":{\"start_date\":\"2025-11-23\",\"end_date\":\"2025-12-23\",\"school_year_id\":2,\"teacher_id\":4},\"record_count\":3}', 4, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 04:32:40'),
+(29, 'error', 'Database query failed: SQLSTATE[42S22]: Column not found: 1054 Unknown column \'c.grade_level\' in \'field list\'', '{\"sql\":\"SELECT DISTINCT a.*, \\r\\n                       s.student_id AS student_code, s.first_name, s.last_name,\\r\\n                       COALESCE(c.grade_level, \'\') AS class, COALESCE(c.section, \'\') AS section,\\r\\n                       u.full_name as recorded_by_name,\\r\\n                       sy.name AS school_year_name\\r\\n                FROM attendance a\\r\\n                INNER JOIN students s ON a.student_id = s.id\\r\\n                       LEFT JOIN users u ON a.recorded_by = u.id\\r\\n                LEFT JOIN school_years sy ON a.school_year_id = sy.id\\r\\n                WHERE a.attendance_date = ? AND a.school_year_id = ?\\r\\n                ORDER BY a.check_in_time DESC\",\"params\":[\"2025-12-23\",2]}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 05:08:42'),
+(30, 'error', 'Failed to get attendance by date: SQLSTATE[42S22]: Column not found: 1054 Unknown column \'c.grade_level\' in \'field list\'', '{\"date\":\"2025-12-23\",\"school_year_id\":2}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 05:08:42'),
+(31, 'error', 'Database query failed: SQLSTATE[42S22]: Column not found: 1054 Unknown column \'c.grade_level\' in \'field list\'', '{\"sql\":\"SELECT DISTINCT a.*, \\r\\n                       s.student_id AS student_code, s.first_name, s.last_name,\\r\\n                       COALESCE(c.grade_level, \'\') AS class, COALESCE(c.section, \'\') AS section,\\r\\n                       u.full_name as recorded_by_name,\\r\\n                       sy.name AS school_year_name\\r\\n                FROM attendance a\\r\\n                INNER JOIN students s ON a.student_id = s.id\\r\\n                       LEFT JOIN users u ON a.recorded_by = u.id\\r\\n                LEFT JOIN school_years sy ON a.school_year_id = sy.id\\r\\n                WHERE a.attendance_date = ? AND a.school_year_id = ?\\r\\n                ORDER BY a.check_in_time DESC\",\"params\":[\"2025-12-23\",2]}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 05:08:52'),
+(32, 'error', 'Failed to get attendance by date: SQLSTATE[42S22]: Column not found: 1054 Unknown column \'c.grade_level\' in \'field list\'', '{\"date\":\"2025-12-23\",\"school_year_id\":2}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 05:08:52');
 
 -- --------------------------------------------------------
 
@@ -283,9 +339,9 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id`, `username`, `password_hash`, `role`, `full_name`, `email`, `created_at`, `updated_at`, `last_login`, `is_active`, `is_premium`, `premium_expires_at`) VALUES
-(1, 'admin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', 'System Administrator', 'admin@attendance.local', '2025-12-06 08:04:25', '2025-12-21 10:42:54', '2025-12-21 09:58:20', 1, 1, NULL),
-(4, 'teacher', '$2y$10$sD03JRxYLjcpdG.s7zC/cO/Bcmr.8BaJ8WsjigjDg38JDcITLuZq6', 'teacher', 'Jona Mondia', 'teacher@gmail.com', '2025-12-16 13:36:21', '2025-12-21 11:08:21', '2025-12-21 09:36:34', 1, 0, NULL),
-(5, 'teacher1', '$2y$10$mWDAZgRK3LhTzr8kXf0OJOQFlhIve4gWxg/ryZLEnoMMxrgXb8002', 'teacher', 'Maloi Cruz', 'teacher1@gmail.com', '2025-12-19 05:59:35', '2025-12-21 11:08:54', '2025-12-21 09:46:57', 1, 1, NULL);
+(1, 'admin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', 'System Administrator', 'admin@attendance.local', '2025-12-06 08:04:25', '2025-12-23 05:08:05', '2025-12-23 05:08:05', 1, 1, NULL),
+(4, 'teacher', '$2y$10$sD03JRxYLjcpdG.s7zC/cO/Bcmr.8BaJ8WsjigjDg38JDcITLuZq6', 'teacher', 'Jona Mondia', 'teacher@gmail.com', '2025-12-16 13:36:21', '2025-12-23 04:03:11', '2025-12-23 04:03:11', 1, 1, NULL),
+(5, 'teacher1', '$2y$10$mWDAZgRK3LhTzr8kXf0OJOQFlhIve4gWxg/ryZLEnoMMxrgXb8002', 'teacher', 'Maloi Cruz', 'teacher1@gmail.com', '2025-12-19 05:59:35', '2025-12-22 12:26:04', '2025-12-22 12:26:04', 1, 1, NULL);
 
 --
 -- Indexes for dumped tables
@@ -332,6 +388,13 @@ ALTER TABLE `retry_queue`
   ADD KEY `idx_operation` (`operation_type`);
 
 --
+-- Indexes for table `school_settings`
+--
+ALTER TABLE `school_settings`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `unique_key` (`setting_key`);
+
+--
 -- Indexes for table `school_years`
 --
 ALTER TABLE `school_years`
@@ -358,7 +421,8 @@ ALTER TABLE `students`
   ADD KEY `idx_student_id` (`student_id`),
   ADD KEY `idx_name` (`last_name`,`first_name`),
   ADD KEY `idx_lrn` (`lrn`),
-  ADD KEY `idx_sms_enabled` (`sms_enabled`);
+  ADD KEY `idx_sms_enabled` (`sms_enabled`),
+  ADD KEY `idx_photo_path` (`photo_path`);
 
 --
 -- Indexes for table `student_classes`
@@ -398,13 +462,13 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `attendance`
 --
 ALTER TABLE `attendance`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=17;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=20;
 
 --
 -- AUTO_INCREMENT for table `classes`
 --
 ALTER TABLE `classes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `notification_logs`
@@ -419,6 +483,12 @@ ALTER TABLE `retry_queue`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `school_settings`
+--
+ALTER TABLE `school_settings`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+
+--
 -- AUTO_INCREMENT for table `school_years`
 --
 ALTER TABLE `school_years`
@@ -428,19 +498,19 @@ ALTER TABLE `school_years`
 -- AUTO_INCREMENT for table `students`
 --
 ALTER TABLE `students`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
 
 --
 -- AUTO_INCREMENT for table `student_classes`
 --
 ALTER TABLE `student_classes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
 
 --
 -- AUTO_INCREMENT for table `system_logs`
 --
 ALTER TABLE `system_logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=33;
 
 --
 -- AUTO_INCREMENT for table `users`

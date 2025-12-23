@@ -2,7 +2,7 @@
 /**
  * Class Management Page
  * Display, create, and manage classes
- * Admin and Teacher roles allowed
+ * Admin: Full access | Principal: View-only | Teacher: Own classes
  * 
  * Requirements: 3.1, 3.2, 3.3
  */
@@ -15,8 +15,8 @@ require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/schoolyear.php';
 require_once __DIR__ . '/../includes/classes.php';
 
-// Require admin or teacher role
-requireAnyRole(['admin', 'teacher']);
+// Require admin, principal, or teacher role
+requireAnyRole(['admin', 'principal', 'teacher']);
 
 $errors = [];
 $formData = [
@@ -26,21 +26,33 @@ $formData = [
     'school_year_id' => ''
 ];
 
+// Get current user info
+$currentUser = getCurrentUser();
+$isTeacher = isTeacher();
+$isPrincipalUser = isPrincipal();
+$teacherId = $currentUser['id'] ?? null;
+
 // Get filter parameters
 $filterSchoolYearId = isset($_GET['school_year_id']) ? (int)$_GET['school_year_id'] : null;
 
-// Handle form submissions (Admin only for create/delete)
-if (isPost() && isAdmin()) {
+// Handle form submissions (Admin can manage all, Teachers can manage their own, Principal is view-only)
+if (isPost() && !$isPrincipalUser) {
     verifyCsrf();
     
     $action = $_POST['action'] ?? '';
     
     if ($action === 'create') {
-        // Create new class
+        // Create new class - Admin or Teacher
         $formData['grade_level'] = sanitizeString($_POST['grade_level'] ?? '');
         $formData['section'] = sanitizeString($_POST['section'] ?? '');
-        $formData['teacher_id'] = (int)($_POST['teacher_id'] ?? 0);
         $formData['school_year_id'] = (int)($_POST['school_year_id'] ?? 0);
+        
+        // Teachers can only create classes for themselves
+        if ($isTeacher) {
+            $formData['teacher_id'] = $teacherId;
+        } else {
+            $formData['teacher_id'] = (int)($_POST['teacher_id'] ?? 0);
+        }
         
         // Validate required fields
         if (empty($formData['grade_level'])) {
@@ -72,7 +84,7 @@ if (isPost() && isAdmin()) {
             }
         }
     } elseif ($action === 'delete') {
-        // Deactivate class
+        // Deactivate class - Admin can delete any, Teacher can only delete their own
         $classId = (int)($_POST['class_id'] ?? 0);
         
         if ($classId <= 0) {
@@ -80,13 +92,54 @@ if (isPost() && isAdmin()) {
         } else {
             $class = getClassById($classId);
             if ($class) {
-                $result = deactivateClass($classId);
+                // Check permission: Admin can delete any, Teacher can only delete their own
+                $canDelete = isAdmin() || ($isTeacher && $class['teacher_id'] == $teacherId);
                 
-                if ($result) {
-                    setFlash('success', 'Class "' . $class['grade_level'] . ' - ' . $class['section'] . '" has been deactivated.');
-                    redirect(config('app_url') . '/pages/classes.php' . ($filterSchoolYearId ? '?school_year_id=' . $filterSchoolYearId : ''));
+                if (!$canDelete) {
+                    $errors[] = 'You do not have permission to delete this class.';
                 } else {
-                    $errors[] = 'Failed to deactivate class.';
+                    $result = deactivateClass($classId);
+                    
+                    if ($result) {
+                        setFlash('success', 'Class "' . $class['grade_level'] . ' - ' . $class['section'] . '" has been deactivated.');
+                        redirect(config('app_url') . '/pages/classes.php' . ($filterSchoolYearId ? '?school_year_id=' . $filterSchoolYearId : ''));
+                    } else {
+                        $errors[] = 'Failed to deactivate class.';
+                    }
+                }
+            } else {
+                $errors[] = 'Class not found.';
+            }
+        }
+    } elseif ($action === 'update') {
+        // Update class - Admin can update any, Teacher can only update their own
+        $classId = (int)($_POST['edit_class_id'] ?? 0);
+        $newGradeLevel = sanitizeString($_POST['edit_grade_level'] ?? '');
+        $newSection = sanitizeString($_POST['edit_section'] ?? '');
+        
+        if ($classId <= 0) {
+            $errors[] = 'Invalid class selected.';
+        } elseif (empty($newGradeLevel) || empty($newSection)) {
+            $errors[] = 'Grade level and section are required.';
+        } else {
+            $class = getClassById($classId);
+            if ($class) {
+                // Check permission: Admin can update any, Teacher can only update their own
+                $canUpdate = isAdmin() || ($isTeacher && $class['teacher_id'] == $teacherId);
+                
+                if (!$canUpdate) {
+                    $errors[] = 'You do not have permission to edit this class.';
+                } else {
+                    // Update the class
+                    $updateSql = "UPDATE classes SET grade_level = ?, section = ?, updated_at = NOW() WHERE id = ?";
+                    $result = dbExecute($updateSql, [$newGradeLevel, $newSection, $classId]);
+                    
+                    if ($result) {
+                        setFlash('success', 'Class updated to "' . $newGradeLevel . ' - ' . $newSection . '" successfully.');
+                        redirect(config('app_url') . '/pages/classes.php' . ($filterSchoolYearId ? '?school_year_id=' . $filterSchoolYearId : ''));
+                    } else {
+                        $errors[] = 'Failed to update class.';
+                    }
                 }
             } else {
                 $errors[] = 'Class not found.';
@@ -106,20 +159,30 @@ if (!$selectedSchoolYearId && $activeSchoolYear) {
 }
 
 // Get classes for selected school year
-$classes = $selectedSchoolYearId ? getClassesBySchoolYear($selectedSchoolYearId) : [];
+// Teachers only see their own classes
+if ($isTeacher) {
+    $classes = $selectedSchoolYearId ? getTeacherClasses($teacherId, $selectedSchoolYearId) : [];
+} else {
+    $classes = $selectedSchoolYearId ? getClassesBySchoolYear($selectedSchoolYearId) : [];
+}
 
-// Get all teachers for dropdown
-$teachers = getAllTeachers();
+// Get all teachers for dropdown (Admin only)
+$teachers = isAdmin() ? getAllTeachers() : [];
 
-// Get teachers without advisory for the selected school year (for the notice)
-$teachersWithoutAdvisory = $selectedSchoolYearId ? getTeachersWithoutAdvisory($selectedSchoolYearId) : [];
+// Get teachers without advisory for the selected school year (for the notice - Admin only)
+$teachersWithoutAdvisory = ($selectedSchoolYearId && isAdmin()) ? getTeachersWithoutAdvisory($selectedSchoolYearId) : [];
 
 // Set default school year for form
 if (empty($formData['school_year_id']) && $selectedSchoolYearId) {
     $formData['school_year_id'] = $selectedSchoolYearId;
 }
 
-$pageTitle = 'Classes';
+// For teachers, pre-fill their ID
+if ($isTeacher) {
+    $formData['teacher_id'] = $teacherId;
+}
+
+$pageTitle = $isTeacher ? 'My Class' : 'Classes';
 ?>
 
 <?php require_once __DIR__ . '/../includes/header.php'; ?>
@@ -219,13 +282,13 @@ $pageTitle = 'Classes';
         <?php endif; ?>
         
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Create Class Form - Admin Only -->
-            <?php if (!empty($schoolYears) && isAdmin()): ?>
+            <!-- Create Class Form - Admin and Teachers (not Principal) -->
+            <?php if (!empty($schoolYears) && !$isPrincipalUser): ?>
             <div class="lg:col-span-1">
                 <div class="bg-white rounded-xl border border-gray-100 p-6">
                     <h2 class="text-lg font-semibold text-gray-900 mb-4">Create Class</h2>
                     
-                    <?php if (empty($teachers)): ?>
+                    <?php if (isAdmin() && empty($teachers)): ?>
                         <div class="bg-amber-50 border border-amber-200 text-amber-700 p-4 rounded-lg">
                             <p class="text-sm">No teachers found. Please create a user with the "teacher" role first.</p>
                         </div>
@@ -271,6 +334,7 @@ $pageTitle = 'Classes';
                             >
                         </div>
                         
+                        <?php if (isAdmin()): ?>
                         <div>
                             <label for="teacher_id" class="block text-sm font-medium text-gray-700 mb-1">
                                 Teacher <span class="text-red-500">*</span>
@@ -289,6 +353,18 @@ $pageTitle = 'Classes';
                                 <?php endforeach; ?>
                             </select>
                         </div>
+                        <?php else: ?>
+                        <!-- Teachers are auto-assigned to their own class -->
+                        <input type="hidden" name="teacher_id" value="<?php echo $teacherId; ?>">
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <p class="text-sm text-blue-700">
+                                <svg class="inline-block w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                This class will be assigned to you automatically.
+                            </p>
+                        </div>
+                        <?php endif; ?>
                         
                         <div>
                             <label for="school_year_id" class="block text-sm font-medium text-gray-700 mb-1">
@@ -325,7 +401,7 @@ $pageTitle = 'Classes';
             <?php endif; ?>
 
             <!-- Classes List -->
-            <div class="<?php echo (!empty($schoolYears) && isAdmin()) ? 'lg:col-span-2' : 'lg:col-span-3'; ?>">
+            <div class="<?php echo (!empty($schoolYears) && !$isPrincipalUser) ? 'lg:col-span-2' : 'lg:col-span-3'; ?>">
                 <div class="bg-white rounded-xl border border-gray-100 overflow-hidden">
                     <div class="px-6 py-4 border-b border-gray-100">
                         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -425,7 +501,20 @@ $pageTitle = 'Classes';
                                                         </svg>
                                                         Students
                                                     </a>
-                                                    <?php if (isAdmin()): ?>
+                                                    <?php 
+                                                    // Admin can delete any class, Teacher can only delete their own, Principal is view-only
+                                                    $canDeleteClass = !$isPrincipalUser && (isAdmin() || ($isTeacher && isset($class['teacher_id']) && $class['teacher_id'] == $teacherId));
+                                                    if ($canDeleteClass): 
+                                                    ?>
+                                                    <a 
+                                                        href="<?php echo config('app_url'); ?>/pages/class-edit.php?id=<?php echo $class['id']; ?>"
+                                                        class="inline-flex items-center px-3 py-1.5 bg-amber-50 text-amber-700 text-xs font-medium rounded-lg hover:bg-amber-100 transition-colors border border-amber-200"
+                                                    >
+                                                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                                        </svg>
+                                                        Edit
+                                                    </a>
                                                     <form method="POST" action="" class="inline-block">
                                                         <?php echo csrfField(); ?>
                                                         <input type="hidden" name="action" value="delete">
