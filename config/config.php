@@ -41,7 +41,7 @@ $config = [
     'app_url' => getenv('APP_URL') ?: 'http://localhost/school-scan',
     'app_env' => getenv('APP_ENV') ?: 'development',
     'debug' => true,
-    'school_name' => 'Your School Name', // Update this with your school name
+    'school_name' => 'SAGAY NATIONAL HIGH SCHOOL', // Update this with your school name
     
     // Security Settings
     'session_timeout' => 7200, // 2 hours in seconds
@@ -53,8 +53,9 @@ $config = [
     'export_path' => __DIR__ . '/../storage/exports/',
     'upload_max_size' => 5242880, // 5MB in bytes
     
-    // SMS Mobile API Settings
-    'smsmobileapi_key' => getenv('SMSMOBILEAPI_KEY') ?: '',
+    // Semaphore SMS API Settings (Philippines)
+    'semaphore_api_key' => getenv('SEMAPHORE_API_KEY') ?: '',
+    'semaphore_sender' => getenv('SEMAPHORE_SENDER') ?: 'SEMAPHORE',
     
     // Retry Settings
     'retry' => [

@@ -1,7 +1,7 @@
 <?php
 /**
  * Notification Functions
- * Send parent notifications via SMS (SMS Mobile API)
+ * Send parent notifications via SMS (Semaphore API - Philippines)
  */
 
 require_once __DIR__ . '/db.php';
@@ -45,7 +45,31 @@ function formatAttendanceMessage($student, $status = 'present', $timestamp = nul
 }
 
 /**
- * Send SMS notification via SMS Mobile API
+ * Format phone number for Semaphore (Philippine format)
+ * Semaphore accepts both 09xx and 639xx formats
+ * 
+ * @param string $phone Phone number
+ * @return string Formatted phone number
+ */
+function formatPhoneForSemaphore($phone) {
+    // Remove all non-numeric characters except +
+    $phone = preg_replace('/[^0-9]/', '', $phone);
+    
+    // If starts with 0, convert to 63 (international format)
+    if (substr($phone, 0, 1) === '0') {
+        $phone = '63' . substr($phone, 1);
+    }
+    
+    // If 10 digits starting with 9, add 63 prefix
+    if (strlen($phone) === 10 && substr($phone, 0, 1) === '9') {
+        $phone = '63' . $phone;
+    }
+    
+    return $phone;
+}
+
+/**
+ * Send SMS notification via Semaphore API
  * 
  * @param string $phone Recipient phone number
  * @param string $message SMS message
@@ -55,56 +79,124 @@ function sendSmsNotification($phone, $message) {
     $result = ['success' => false, 'error' => null, 'response' => null];
     
     try {
-        $apiKey = config('smsmobileapi_key');
+        $apiKey = config('semaphore_api_key');
+        $senderName = config('semaphore_sender', 'SEMAPHORE');
         
         if (!$apiKey) {
-            $result['error'] = 'SMS Mobile API key not configured';
+            $result['error'] = 'Semaphore API key not configured';
+            error_log('[SMS] Error: Semaphore API key not configured');
             return $result;
         }
         
-        $url = 'https://api.smsmobileapi.com/sendsms/';
+        // Format phone number for Philippine format (09xx)
+        $formattedPhone = formatPhoneForSemaphore($phone);
         
-        $data = [
+        // Log the attempt
+        error_log('[SMS] Sending to: ' . $formattedPhone . ' | Original: ' . $phone);
+        
+        $url = 'https://semaphore.co/api/v4/messages';
+        
+        $parameters = [
             'apikey' => $apiKey,
-            'recipients' => $phone,
-            'message' => $message
+            'number' => $formattedPhone,
+            'message' => $message,
+            'sendername' => $senderName
         ];
         
-        $options = [
-            'http' => [
-                'header' => "Content-Type: application/x-www-form-urlencoded\r\n",
-                'method' => 'POST',
-                'content' => http_build_query($data),
-                'timeout' => 30,
-                'ignore_errors' => true
-            ]
-        ];
+        // Log request (without API key)
+        error_log('[SMS] Request URL: ' . $url);
+        error_log('[SMS] Sender: ' . $senderName);
         
-        $context = stream_context_create($options);
-        $response = @file_get_contents($url, false, $context);
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => http_build_query($parameters),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_SSL_VERIFYPEER => true
+        ]);
         
-        if ($response === false) {
-            $result['error'] = 'Failed to connect to SMS Mobile API';
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+        
+        // Log response
+        error_log('[SMS] HTTP Code: ' . $httpCode);
+        error_log('[SMS] Response: ' . $response);
+        
+        if ($curlError) {
+            $result['error'] = 'Connection error: ' . $curlError;
+            error_log('[SMS] cURL Error: ' . $curlError);
             return $result;
         }
         
         $result['response'] = $response;
         $responseData = json_decode($response, true);
         
-        if (isset($responseData['success']) && $responseData['success'] === false) {
-            $result['error'] = $responseData['error'] ?? 'SMS send failed';
-            return $result;
-        }
-        
-        $result['success'] = true;
-        
-        if (function_exists('logInfo')) {
-            logInfo('SMS notification sent', ['recipient' => $phone]);
+        // Check HTTP status code
+        if ($httpCode >= 200 && $httpCode < 300) {
+            // Check Semaphore response
+            if (is_array($responseData) && !empty($responseData)) {
+                // Check if it's an error response
+                if (isset($responseData['error'])) {
+                    $result['error'] = $responseData['error'];
+                    error_log('[SMS] API Error: ' . $responseData['error']);
+                    return $result;
+                }
+                
+                // Success - Semaphore returns array of message objects
+                $firstMessage = $responseData[0] ?? $responseData;
+                $status = $firstMessage['status'] ?? '';
+                $messageId = $firstMessage['message_id'] ?? 'N/A';
+                
+                error_log('[SMS] Message ID: ' . $messageId . ' | Status: ' . $status);
+                
+                if (in_array($status, ['Queued', 'Pending', 'Sent', 'Success'])) {
+                    $result['success'] = true;
+                    error_log('[SMS] SUCCESS - Message queued/sent');
+                    
+                    if (function_exists('logInfo')) {
+                        logInfo('SMS notification sent via Semaphore', [
+                            'recipient' => $formattedPhone,
+                            'messageId' => $messageId,
+                            'status' => $status
+                        ]);
+                    }
+                } else if ($status === 'Failed') {
+                    $result['error'] = 'Message failed to send - Status: Failed';
+                    error_log('[SMS] FAILED - Message status is Failed');
+                } else {
+                    // Assume success if we got a response with message_id
+                    if (isset($firstMessage['message_id'])) {
+                        $result['success'] = true;
+                        error_log('[SMS] SUCCESS - Got message_id');
+                    } else {
+                        $result['error'] = 'Unknown status: ' . $status;
+                        error_log('[SMS] Unknown status: ' . $status);
+                    }
+                }
+            } else {
+                $result['error'] = 'Invalid response from Semaphore';
+                error_log('[SMS] Invalid response format');
+            }
+        } else {
+            // Handle error response
+            $errorMsg = 'HTTP ' . $httpCode;
+            if (isset($responseData['error'])) {
+                $errorMsg = $responseData['error'];
+            } elseif (isset($responseData['message'])) {
+                $errorMsg = $responseData['message'];
+            }
+            $result['error'] = $errorMsg;
+            error_log('[SMS] HTTP Error: ' . $errorMsg);
         }
         
         return $result;
     } catch (Exception $e) {
         $result['error'] = $e->getMessage();
+        error_log('[SMS] Exception: ' . $e->getMessage());
         
         if (function_exists('logError')) {
             logError('SMS notification failed: ' . $e->getMessage(), ['recipient' => $phone]);

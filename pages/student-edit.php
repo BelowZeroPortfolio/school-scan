@@ -165,10 +165,13 @@ if (isPost()) {
             
         } catch (Exception $e) {
             dbRollback();
+            // Log the actual error
+            error_log('[STUDENT-EDIT] Error: ' . $e->getMessage());
+            
             if (function_exists('logError')) {
                 logError('Failed to update student: ' . $e->getMessage(), $formData);
             }
-            $errors[] = 'Failed to update student. Please try again.';
+            $errors[] = 'Failed to update student: ' . $e->getMessage();
         }
     }
 }

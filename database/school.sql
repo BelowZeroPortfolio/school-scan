@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Dec 23, 2025 at 06:12 AM
+-- Generation Time: Dec 25, 2025 at 07:12 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -220,12 +220,12 @@ CREATE TABLE `students` (
 --
 
 INSERT INTO `students` (`id`, `student_id`, `lrn`, `first_name`, `last_name`, `barcode_path`, `photo_path`, `parent_name`, `parent_phone`, `parent_email`, `address`, `date_of_birth`, `created_at`, `updated_at`, `is_active`, `sms_enabled`, `previous_school`) VALUES
-(9, '117327080031', '117327080031', 'Juans', 'Dela Cruz', 'storage/barcodes/student_117327080031.svg', 'storage/photos/student_9_1766397969.png', 'Juanito', '+639871627431', 'carly@gmail.com', 'purok mangingisda, barangay zone 1-a, pulupandan', '2003-03-05', '2025-12-19 07:12:42', '2025-12-22 11:46:15', 1, 1, NULL),
+(9, '117327080031', '117327080031', 'Juans', 'Dela Cruz', 'storage/barcodes/student_117327080031.svg', 'storage/photos/student_9_1766686047.jpg', 'Juanito', '+639945880632', 'jazz@gmail.com', 'purok mangingisda, barangay zone 2, pulupandan', '2003-03-05', '2025-12-19 07:12:42', '2025-12-25 18:07:50', 1, 1, NULL),
 (10, 'STU-2025-0002', '123123123123', 'Sofia', 'First', 'storage/barcodes/student_123123123123.svg', NULL, 'Jullie', '+639192381920', 'pearly@gmail.com', 'purok magsasaka, barangay zone 2, pulupandan', '2002-09-02', '2025-12-19 07:15:40', '2025-12-22 11:46:15', 1, 1, NULL),
 (11, 'STU-2025-0003', '117244007448', 'Kenny', 'Jayona', 'storage/barcodes/student_117244007448.svg', NULL, 'sample', '+639876432657', 'sample@gmail.com', 'SAMPLE ADDRESS', '2025-12-22', '2025-12-22 09:42:00', '2025-12-22 11:46:15', 1, 1, NULL),
 (12, 'STU-2025-0004', '123456789123', 'sample', 'sample', 'storage/barcodes/student_123456789123.svg', 'storage/photos/student_12_1766404143.png', 'sample parent', '+639876543219', 'sample@gmail.com', 'sample CITY', '2025-12-22', '2025-12-22 11:49:03', '2025-12-22 11:49:03', 1, 0, NULL),
 (13, 'STU-2025-0005', '123456789098', 'FIRST NAME', 'LAST NAME', 'storage/barcodes/student_123456789098.svg', 'storage/photos/student_13_1766404730.png', 'PARENT', '+639837474747', 'parent@gmail.com', 'sagay city', NULL, '2025-12-22 11:58:50', '2025-12-22 11:58:50', 1, 0, NULL),
-(14, 'STU-2025-0006', '123456765432', 'Palaboy', 'boy', 'storage/barcodes/student_123456765432.svg', 'storage/photos/student_14_1766405067.png', 'sample1', '+639876463228', 'pal@gmail.com', 'cadiz city', '2025-12-22', '2025-12-22 12:04:27', '2025-12-22 12:04:27', 1, 0, NULL),
+(14, '123456765432', '123456765432', 'Palaboy', 'boy', 'storage/barcodes/student_123456765432.svg', 'storage/photos/student_14_1766686104.jpg', 'sample1', '+639876463228', 'pal@gmail.com', 'cadiz city', '2025-12-22', '2025-12-22 12:04:27', '2025-12-25 18:08:24', 1, 0, NULL),
 (15, 'STU-2025-0007', '117244007441', 'kenny', 'jayona', 'storage/barcodes/student_117244007441.svg', 'storage/photos/student_15_1766462512.png', 'NSOY', '+639876543234', 'parent1@gmail.com', 'MANAPLA CITY', '2025-12-23', '2025-12-23 04:01:52', '2025-12-23 04:01:52', 1, 0, NULL);
 
 -- --------------------------------------------------------
@@ -311,7 +311,9 @@ INSERT INTO `system_logs` (`id`, `log_level`, `message`, `context`, `user_id`, `
 (29, 'error', 'Database query failed: SQLSTATE[42S22]: Column not found: 1054 Unknown column \'c.grade_level\' in \'field list\'', '{\"sql\":\"SELECT DISTINCT a.*, \\r\\n                       s.student_id AS student_code, s.first_name, s.last_name,\\r\\n                       COALESCE(c.grade_level, \'\') AS class, COALESCE(c.section, \'\') AS section,\\r\\n                       u.full_name as recorded_by_name,\\r\\n                       sy.name AS school_year_name\\r\\n                FROM attendance a\\r\\n                INNER JOIN students s ON a.student_id = s.id\\r\\n                       LEFT JOIN users u ON a.recorded_by = u.id\\r\\n                LEFT JOIN school_years sy ON a.school_year_id = sy.id\\r\\n                WHERE a.attendance_date = ? AND a.school_year_id = ?\\r\\n                ORDER BY a.check_in_time DESC\",\"params\":[\"2025-12-23\",2]}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 05:08:42'),
 (30, 'error', 'Failed to get attendance by date: SQLSTATE[42S22]: Column not found: 1054 Unknown column \'c.grade_level\' in \'field list\'', '{\"date\":\"2025-12-23\",\"school_year_id\":2}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 05:08:42'),
 (31, 'error', 'Database query failed: SQLSTATE[42S22]: Column not found: 1054 Unknown column \'c.grade_level\' in \'field list\'', '{\"sql\":\"SELECT DISTINCT a.*, \\r\\n                       s.student_id AS student_code, s.first_name, s.last_name,\\r\\n                       COALESCE(c.grade_level, \'\') AS class, COALESCE(c.section, \'\') AS section,\\r\\n                       u.full_name as recorded_by_name,\\r\\n                       sy.name AS school_year_name\\r\\n                FROM attendance a\\r\\n                INNER JOIN students s ON a.student_id = s.id\\r\\n                       LEFT JOIN users u ON a.recorded_by = u.id\\r\\n                LEFT JOIN school_years sy ON a.school_year_id = sy.id\\r\\n                WHERE a.attendance_date = ? AND a.school_year_id = ?\\r\\n                ORDER BY a.check_in_time DESC\",\"params\":[\"2025-12-23\",2]}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 05:08:52'),
-(32, 'error', 'Failed to get attendance by date: SQLSTATE[42S22]: Column not found: 1054 Unknown column \'c.grade_level\' in \'field list\'', '{\"date\":\"2025-12-23\",\"school_year_id\":2}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 05:08:52');
+(32, 'error', 'Failed to get attendance by date: SQLSTATE[42S22]: Column not found: 1054 Unknown column \'c.grade_level\' in \'field list\'', '{\"date\":\"2025-12-23\",\"school_year_id\":2}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0', '2025-12-23 05:08:52'),
+(33, 'info', 'Report generated', '{\"filters\":{\"start_date\":\"2025-11-25\",\"end_date\":\"2025-12-25\",\"school_year_id\":2},\"record_count\":3}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-25 18:11:38'),
+(34, 'info', 'Report generated', '{\"filters\":{\"start_date\":\"2025-11-25\",\"end_date\":\"2025-12-25\",\"school_year_id\":2,\"class_id\":null,\"teacher_id\":null},\"record_count\":3}', 1, '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36', '2025-12-25 18:11:38');
 
 -- --------------------------------------------------------
 
@@ -323,7 +325,7 @@ CREATE TABLE `users` (
   `id` int(11) NOT NULL,
   `username` varchar(50) NOT NULL,
   `password_hash` varchar(255) NOT NULL,
-  `role` enum('admin','operator','viewer','teacher') NOT NULL DEFAULT 'viewer',
+  `role` enum('admin','principal','teacher') NOT NULL DEFAULT 'teacher',
   `full_name` varchar(100) NOT NULL,
   `email` varchar(100) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
@@ -339,9 +341,9 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id`, `username`, `password_hash`, `role`, `full_name`, `email`, `created_at`, `updated_at`, `last_login`, `is_active`, `is_premium`, `premium_expires_at`) VALUES
-(1, 'admin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', 'System Administrator', 'admin@attendance.local', '2025-12-06 08:04:25', '2025-12-23 05:08:05', '2025-12-23 05:08:05', 1, 1, NULL),
-(4, 'teacher', '$2y$10$sD03JRxYLjcpdG.s7zC/cO/Bcmr.8BaJ8WsjigjDg38JDcITLuZq6', 'teacher', 'Jona Mondia', 'teacher@gmail.com', '2025-12-16 13:36:21', '2025-12-23 04:03:11', '2025-12-23 04:03:11', 1, 1, NULL),
-(5, 'teacher1', '$2y$10$mWDAZgRK3LhTzr8kXf0OJOQFlhIve4gWxg/ryZLEnoMMxrgXb8002', 'teacher', 'Maloi Cruz', 'teacher1@gmail.com', '2025-12-19 05:59:35', '2025-12-22 12:26:04', '2025-12-22 12:26:04', 1, 1, NULL);
+(1, 'admin', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', 'System Administrator', 'admin@attendance.local', '2025-12-06 00:04:25', '2025-12-22 21:08:05', '2025-12-22 21:08:05', 1, 1, NULL),
+(4, 'teacher', '$2y$10$sD03JRxYLjcpdG.s7zC/cO/Bcmr.8BaJ8WsjigjDg38JDcITLuZq6', 'teacher', 'Jona Mondia', 'teacher@gmail.com', '2025-12-16 05:36:21', '2025-12-22 20:03:11', '2025-12-22 20:03:11', 1, 1, NULL),
+(5, 'teacher1', '$2y$10$mWDAZgRK3LhTzr8kXf0OJOQFlhIve4gWxg/ryZLEnoMMxrgXb8002', 'teacher', 'Maloi Cruz', 'teacher1@gmail.com', '2025-12-18 21:59:35', '2025-12-22 04:26:04', '2025-12-22 04:26:04', 1, 1, NULL);
 
 --
 -- Indexes for dumped tables
@@ -445,16 +447,6 @@ ALTER TABLE `system_logs`
   ADD KEY `idx_user` (`user_id`);
 
 --
--- Indexes for table `users`
---
-ALTER TABLE `users`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `username` (`username`),
-  ADD KEY `idx_username` (`username`),
-  ADD KEY `idx_role` (`role`),
-  ADD KEY `idx_is_premium` (`is_premium`);
-
---
 -- AUTO_INCREMENT for dumped tables
 --
 
@@ -510,58 +502,17 @@ ALTER TABLE `student_classes`
 -- AUTO_INCREMENT for table `system_logs`
 --
 ALTER TABLE `system_logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=33;
-
---
--- AUTO_INCREMENT for table `users`
---
-ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=35;
 
 --
 -- Constraints for dumped tables
 --
 
 --
--- Constraints for table `attendance`
---
-ALTER TABLE `attendance`
-  ADD CONSTRAINT `attendance_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `attendance_ibfk_2` FOREIGN KEY (`recorded_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  ADD CONSTRAINT `fk_attendance_school_year` FOREIGN KEY (`school_year_id`) REFERENCES `school_years` (`id`) ON DELETE SET NULL;
-
---
--- Constraints for table `classes`
---
-ALTER TABLE `classes`
-  ADD CONSTRAINT `fk_classes_school_year` FOREIGN KEY (`school_year_id`) REFERENCES `school_years` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `fk_classes_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
-
---
 -- Constraints for table `notification_logs`
 --
 ALTER TABLE `notification_logs`
   ADD CONSTRAINT `notification_logs_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE;
-
---
--- Constraints for table `sessions`
---
-ALTER TABLE `sessions`
-  ADD CONSTRAINT `sessions_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
-
---
--- Constraints for table `student_classes`
---
-ALTER TABLE `student_classes`
-  ADD CONSTRAINT `fk_student_classes_class` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `fk_student_classes_enrolled_by` FOREIGN KEY (`enrolled_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  ADD CONSTRAINT `fk_student_classes_student` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE;
-
---
--- Constraints for table `system_logs`
---
-ALTER TABLE `system_logs`
-  ADD CONSTRAINT `system_logs_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

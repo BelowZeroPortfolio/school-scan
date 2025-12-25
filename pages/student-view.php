@@ -470,87 +470,144 @@ $currentUser = getCurrentUser();
             
             <div class="p-6 overflow-auto max-h-[80vh]">
                 <div id="idCardContainer" class="flex flex-col sm:flex-row gap-6 justify-center items-center">
-                    <!-- Front of ID Card -->
-                    <div id="idCardFront" style="width: 204px; height: 324px; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #CE1126 100%); border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
-                        <!-- Header with School Name -->
-                        <div style="background: rgba(206,17,38,0.9); padding: 10px 12px; text-align: center;">
-                            <h3 style="font-size: 11px; font-weight: bold; color: #FCD116; text-transform: uppercase; letter-spacing: 0.5px; margin: 0;"><?php echo e(config('school_name', 'School Name')); ?></h3>
+                    <?php
+                    // Get school settings for ID card
+                    $schoolSettings = [];
+                    $settingsSql = "SELECT setting_key, setting_value FROM school_settings WHERE setting_key IN ('school_name', 'school_logo')";
+                    $settingsResult = dbFetchAll($settingsSql);
+                    foreach ($settingsResult as $setting) {
+                        $schoolSettings[$setting['setting_key']] = $setting['setting_value'];
+                    }
+                    $schoolName = $schoolSettings['school_name'] ?? config('school_name', 'School Name');
+                    $schoolLogo = $schoolSettings['school_logo'] ?? '';
+                    $schoolLogoUrl = $schoolLogo ? config('app_url') . '/' . $schoolLogo : '';
+                    $studentPhotoUrl = $student['photo_path'] ? config('app_url') . '/' . $student['photo_path'] : '';
+                    $schoolYear = $activeSchoolYear ? $activeSchoolYear['name'] : date('Y') . '-' . (date('Y') + 1);
+                    $gradeSection = $currentClass ? $currentClass['grade_level'] . ' - ' . $currentClass['section'] : 'Not Enrolled';
+                    ?>
+                    
+                    <!-- FRONT SIDE - Dark Navy Blue Theme -->
+                    <div id="idCardFront" style="width: 204px; height: 324px; background: #0D1B2A; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 25px rgba(0,0,0,0.4); display: flex; flex-direction: column; font-family: 'Segoe UI', Arial, sans-serif;">
+                        <!-- Header -->
+                        <div style="background: #0D1B2A; padding: 12px 10px 8px; text-align: center;">
+                            <h3 style="font-size: 13px; font-weight: bold; color: #FFFFFF; text-transform: uppercase; letter-spacing: 0.5px; line-height: 1.25; margin: 0;"><?php echo e($schoolName); ?></h3>
                         </div>
                         
-                        <div style="padding: 12px; display: flex; flex-direction: column; height: calc(100% - 42px);">
-                            <!-- Photo and Logo Row -->
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-                                <!-- Student Photo -->
-                                <div style="width: 80px; height: 90px; border: 2px solid #CE1126; border-radius: 6px; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center;">
-                                    <svg style="width: 40px; height: 40px; color: #CE1126;" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                                    </svg>
-                                </div>
-                                <!-- School Logo -->
-                                <div style="width: 70px; height: 70px; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center;">
-                                    <span style="font-size: 9px; color: rgba(255,255,255,0.6); text-align: center;">LOGO</span>
-                                </div>
+                        <!-- Gradient Accent Line: Red → Navy → Yellow -->
+                        <div style="height: 4px; background: linear-gradient(to right, #D62828 0%, #D62828 30%, #0D1B2A 50%, #F4D35E 70%, #F4D35E 100%);"></div>
+                        
+                        <!-- Photo and Logo Section -->
+                        <div style="padding: 10px 12px; display: flex; justify-content: space-between; align-items: flex-start; background: #0D1B2A;">
+                            <!-- Student Photo with white border -->
+                            <div style="width: 78px; height: 98px; border: 3px solid #FFFFFF; border-radius: 4px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+                                <?php if ($studentPhotoUrl): ?>
+                                    <img src="<?php echo e($studentPhotoUrl); ?>" alt="Photo" style="width: 100%; height: 100%; object-fit: cover;">
+                                <?php else: ?>
+                                    <div style="width: 100%; height: 100%; background: #1a2a3a; display: flex; align-items: center; justify-content: center;">
+                                        <svg style="width: 40px; height: 40px; color: #3a4a5a;" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                                        </svg>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                             
-                            <!-- Student Info -->
-                            <div style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
-                                <!-- ID Number -->
-                                <div style="margin-bottom: 8px;">
-                                    <p style="font-size: 9px; color: rgba(255,255,255,0.7); margin: 0 0 2px 0;">ID No.</p>
-                                    <p style="font-size: 13px; font-weight: bold; color: #FCD116; font-family: monospace; margin: 0;"><?php echo e($student['lrn'] ?? $student['student_id']); ?></p>
+                            <!-- Logo and School Year -->
+                            <div style="display: flex; flex-direction: column; align-items: center;">
+                                <div style="width: 58px; height: 58px; border-radius: 50%; overflow: hidden; background: white; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+                                    <?php if ($schoolLogoUrl): ?>
+                                        <img src="<?php echo e($schoolLogoUrl); ?>" alt="Logo" style="width: 100%; height: 100%; object-fit: contain;">
+                                    <?php else: ?>
+                                        <div style="width: 100%; height: 100%; background: linear-gradient(180deg, #4a8ac4 0%, #2a5a8a 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #F4D35E;">
+                                            <span style="font-size: 7px; color: white; font-weight: bold;">LOGO</span>
+                                        </div>
+                                    <?php endif; ?>
                                 </div>
-                                
-                                <!-- Student Name -->
-                                <div style="margin-bottom: 8px;">
-                                    <p style="font-size: 9px; color: rgba(255,255,255,0.7); margin: 0 0 2px 0;">Student Name</p>
-                                    <p style="font-size: 12px; font-weight: bold; color: white; margin: 0;"><?php echo e(strtoupper($student['first_name'] . ' ' . $student['last_name'])); ?></p>
-                                </div>
-                                
-                                <!-- Grade & Section -->
-                                <div>
-                                    <p style="font-size: 9px; color: rgba(255,255,255,0.7); margin: 0 0 2px 0;">Grade & Section</p>
-                                    <p style="font-size: 12px; font-weight: 600; color: #FCD116; margin: 0;"><?php echo $currentClass ? e($currentClass['grade_level'] . ' - ' . $currentClass['section']) : 'Not Enrolled'; ?></p>
+                                <div style="text-align: center; margin-top: 8px;">
+                                    <p style="font-size: 8px; color: rgba(255,255,255,0.7); margin: 0;">S.Y.</p>
+                                    <p style="font-size: 11px; font-weight: bold; color: #FFFFFF; margin: 0;"><?php echo e($schoolYear); ?></p>
                                 </div>
                             </div>
+                        </div>
+                        
+                        <!-- Student Info Section - White Background -->
+                        <div style="flex: 1; background: #FFFFFF; padding: 10px 12px; text-align: center;">
+                            <!-- LRN -->
+                            <div style="margin-bottom: 6px;">
+                                <p style="font-size: 8px; color: #333333; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 2px 0;">LRN</p>
+                                <p style="font-size: 15px; font-weight: bold; color: #0D1B2A; font-family: 'Courier New', monospace; margin: 0;"><?php echo e($student['lrn'] ?? $student['student_id']); ?></p>
+                            </div>
+                            
+                            <!-- Student Name -->
+                            <div style="margin-bottom: 6px;">
+                                <p style="font-size: 8px; color: #333333; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 2px 0;">Student Name</p>
+                                <p style="font-size: 12px; font-weight: bold; color: #0D1B2A; margin: 0;"><?php echo e(strtoupper($student['first_name'] . ' ' . $student['last_name'])); ?></p>
+                            </div>
+                            
+                            <!-- Grade & Section -->
+                            <div>
+                                <p style="font-size: 8px; color: #333333; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 2px 0;">Grade & Section</p>
+                                <p style="font-size: 13px; font-weight: bold; color: #0D1B2A; margin: 0;"><?php echo e($gradeSection); ?></p>
+                            </div>
+                        </div>
+                        
+                        <!-- Footer -->
+                        <div style="background: #0D1B2A; padding: 8px 10px; text-align: center;">
+                            <p style="font-size: 8px; font-weight: bold; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1.5px; margin: 0;">Student Identification Card</p>
                         </div>
                     </div>
                     
-                    <!-- Back of ID Card -->
-                    <div id="idCardBack" style="width: 204px; height: 324px; background: linear-gradient(135deg, #CE1126 0%, #1a1a1a 50%, #0038A8 100%); border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
-                        <div style="padding: 16px; display: flex; flex-direction: column; height: 100%; align-items: center;">
+                    <!-- BACK SIDE - Dark Navy Blue Theme -->
+                    <div id="idCardBack" style="width: 204px; height: 324px; background: #0D1B2A; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 25px rgba(0,0,0,0.4); display: flex; flex-direction: column; font-family: 'Segoe UI', Arial, sans-serif;">
+                        <!-- Header -->
+                        <div style="background: #0D1B2A; padding: 12px 10px 8px; text-align: center;">
+                            <h3 style="font-size: 14px; font-weight: bold; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px; margin: 0;">Emergency Contact</h3>
+                        </div>
+                        
+                        <!-- Gradient Accent Line: Red → Navy → Yellow -->
+                        <div style="height: 4px; background: linear-gradient(to right, #D62828 0%, #D62828 30%, #0D1B2A 50%, #F4D35E 70%, #F4D35E 100%);"></div>
+                        
+                        <!-- Main Content - White Background -->
+                        <div style="flex: 1; background: #FFFFFF; margin: 8px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; padding: 10px;">
                             <!-- QR Code -->
-                            <div style="background: white; border-radius: 8px; padding: 10px; margin-bottom: 8px;">
-                                <div id="qrcode-back" style="width: 100px; height: 100px;"></div>
+                            <div style="background: #f5f5f5; border-radius: 8px; padding: 8px; margin-bottom: 6px; border: 2px solid #0D1B2A;">
+                                <div id="qrcode-back" style="width: 85px; height: 85px;"></div>
                             </div>
+                            <p style="font-size: 9px; color: #333333; margin: 0 0 8px 0;">Scan to verify student</p>
                             
-                            <!-- School Year -->
-                            <div style="text-align: center; margin-bottom: 16px;">
-                                <p style="font-size: 10px; color: rgba(255,255,255,0.7); margin: 0;">S.Y.</p>
-                                <p style="font-size: 12px; font-weight: bold; color: #FCD116; margin: 0;"><?php echo $activeSchoolYear ? e($activeSchoolYear['name']) : date('Y') . '-' . (date('Y') + 1); ?></p>
-                            </div>
-                            
-                            <!-- Contact Person Section -->
-                            <div style="width: 100%; flex: 1; background: rgba(255,255,255,0.1); border-radius: 8px; padding: 10px;">
-                                <div style="text-align: center; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 2px solid #FCD116;">
-                                    <p style="font-size: 10px; font-weight: bold; color: #FCD116; text-transform: uppercase; margin: 0;">Contact Person</p>
+                            <!-- In Case of Emergency Section -->
+                            <div style="width: 100%; text-align: center;">
+                                <div style="border-bottom: 1px solid #0D1B2A; padding-bottom: 2px; margin-bottom: 4px;">
+                                    <p style="font-size: 8px; font-weight: bold; color: #0D1B2A; text-transform: uppercase; letter-spacing: 0.3px; margin: 0;">In Case of Emergency</p>
                                 </div>
                                 
-                                <!-- Contact Info Lines -->
-                                <div style="padding: 0 4px;">
-                                    <div style="margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 4px;">
-                                        <p style="font-size: 10px; font-weight: 600; color: white; margin: 0;"><?php echo e($student['parent_name'] ?: '—'); ?></p>
-                                    </div>
-                                    <div style="margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 4px;">
-                                        <p style="font-size: 10px; color: rgba(255,255,255,0.9); margin: 0;"><?php echo e($student['parent_phone'] ?: '—'); ?></p>
-                                    </div>
-                                    <div style="margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 4px;">
-                                        <p style="font-size: 9px; color: rgba(255,255,255,0.9); word-break: break-all; margin: 0;"><?php echo e($student['parent_email'] ?: '—'); ?></p>
-                                    </div>
-                                    <div style="border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 4px;">
-                                        <p style="font-size: 9px; color: rgba(255,255,255,0.9); margin: 0;"><?php echo e($student['address'] ?: '—'); ?></p>
-                                    </div>
+                                <!-- Guardian -->
+                                <div style="margin-bottom: 3px;">
+                                    <p style="font-size: 6px; color: #333333; text-transform: uppercase; margin: 0;">Guardian</p>
+                                    <p style="font-size: 9px; font-weight: bold; color: #0D1B2A; margin: 0;"><?php echo e($student['parent_name'] ?: '—'); ?></p>
+                                </div>
+                                
+                                <!-- Contact Number -->
+                                <div style="margin-bottom: 3px;">
+                                    <p style="font-size: 6px; color: #333333; text-transform: uppercase; margin: 0;">Contact Number</p>
+                                    <p style="font-size: 10px; font-weight: bold; color: #D62828; margin: 0;"><?php echo e($student['parent_phone'] ?: '—'); ?></p>
+                                </div>
+                                
+                                <!-- Email -->
+                                <div style="margin-bottom: 3px;">
+                                    <p style="font-size: 6px; color: #333333; text-transform: uppercase; margin: 0;">Email</p>
+                                    <p style="font-size: 7px; color: #333333; margin: 0; word-break: break-all;"><?php echo e($student['parent_email'] ?: '—'); ?></p>
+                                </div>
+                                
+                                <!-- Address -->
+                                <div>
+                                    <p style="font-size: 7px; color: #333333; margin: 0; line-height: 1.2;"><?php echo e($student['address'] ?: '—'); ?></p>
                                 </div>
                             </div>
+                        </div>
+                        
+                        <!-- Footer -->
+                        <div style="background: #0D1B2A; padding: 8px 10px; text-align: center;">
+                            <p style="font-size: 7px; color: #FFFFFF; margin: 0;">If found, please return to school administration.</p>
                         </div>
                     </div>
                 </div>
@@ -573,8 +630,8 @@ function generateIDCard() {
     
     new QRCode(qrContainerBack, {
         text: '<?php echo e($student['lrn'] ?? $student['student_id']); ?>',
-        width: 100,
-        height: 100,
+        width: 85,
+        height: 85,
         colorDark: '#000000',
         colorLight: '#ffffff',
         correctLevel: QRCode.CorrectLevel.M

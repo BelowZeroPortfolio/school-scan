@@ -479,8 +479,8 @@ $pageTitle = $isTeacher ? 'My Class' : 'Classes';
                                                 </div>
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap">
-                                                <div class="text-sm text-gray-900"><?php echo e($class['teacher_name']); ?></div>
-                                                <div class="text-sm text-gray-500"><?php echo e($class['teacher_email']); ?></div>
+                                                <div class="text-sm text-gray-900"><?php echo e($class['teacher_name'] ?? 'No teacher assigned'); ?></div>
+                                                <div class="text-sm text-gray-500"><?php echo e($class['teacher_email'] ?? ''); ?></div>
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap">
                                                 <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium <?php echo $class['student_count'] > 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-50 text-gray-600 border border-gray-200'; ?>">

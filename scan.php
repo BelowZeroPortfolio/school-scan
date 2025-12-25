@@ -2,7 +2,7 @@
 /**
  * Barcode Scanning Page
  * Teachers/Operators scan student barcodes for attendance
- * Requires authentication (teacher, operator, or admin role)
+ * Optimized for GOOJPRT 2D Barcode Scanner (hardware)
  */
 
 require_once __DIR__ . '/config/config.php';
@@ -29,11 +29,8 @@ if (isPost()) {
     $barcode = sanitizeString($_POST['barcode'] ?? '');
     $mode = sanitizeString($_POST['mode'] ?? 'arrival');
     
-    // Only process if barcode is not empty
     if (!empty($barcode)) {
         $result = processBarcodeScan($barcode, $mode);
-        
-        // Store result in session and redirect to prevent resubmission
         $_SESSION['scan_result'] = $result;
         $_SESSION['scan_mode'] = $mode;
         header('Location: ' . $_SERVER['REQUEST_URI']);
@@ -41,10 +38,10 @@ if (isPost()) {
     }
 }
 
-// Retrieve scan result from session (if any)
+// Retrieve scan result from session
 if (isset($_SESSION['scan_result'])) {
     $scanResult = $_SESSION['scan_result'];
-    unset($_SESSION['scan_result']); // Clear after reading
+    unset($_SESSION['scan_result']);
 }
 if (isset($_SESSION['scan_mode'])) {
     $scanMode = $_SESSION['scan_mode'];
@@ -54,19 +51,40 @@ if (isset($_SESSION['scan_mode'])) {
 // Mode display settings
 $modeConfig = [
     'arrival' => [
-        'title' => 'Arrival: Time In',
+        'title' => 'Time In',
         'subtitle' => 'Record student arrival',
-        'color' => 'green',
+        'color' => 'emerald',
+        'gradient' => 'from-emerald-500 to-green-600',
         'icon' => 'M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1'
     ],
     'dismissal' => [
-        'title' => 'Dismissal: Time Out',
+        'title' => 'Time Out',
         'subtitle' => 'Record student dismissal',
         'color' => 'orange',
+        'gradient' => 'from-orange-500 to-amber-600',
         'icon' => 'M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1'
     ]
 ];
 $currentMode = $modeConfig[$scanMode];
+
+// Determine result type for better messaging
+$resultType = null;
+if ($scanResult) {
+    if ($scanResult['success']) {
+        $resultType = 'success';
+    } elseif (isset($scanResult['error']['code'])) {
+        $code = $scanResult['error']['code'];
+        if ($code === 'ALREADY_RECORDED' || $code === 'DUPLICATE_SCAN') {
+            $resultType = 'already_recorded';
+        } elseif ($code === 'STUDENT_NOT_FOUND') {
+            $resultType = 'not_found';
+        } else {
+            $resultType = 'error';
+        }
+    } else {
+        $resultType = 'error';
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -75,53 +93,28 @@ $currentMode = $modeConfig[$scanMode];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scan Attendance - <?php echo e(config('app_name')); ?></title>
     
-    <!-- Favicon -->
     <link rel="icon" type="image/png" href="<?php echo config('app_url'); ?>/assets/images/lex.png">
-    
-    <!-- Tailwind CSS -->
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    
-    <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    
-    <!-- Theme System -->
     <?php require_once __DIR__ . '/includes/theme.php'; ?>
     
     <style>
         [x-cloak] { display: none !important; }
-        #reader {
-            width: 100%;
-            min-height: 280px;
-            border-radius: 12px;
-            overflow: hidden;
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 1; }
+            100% { transform: scale(1.4); opacity: 0; }
         }
-        #reader video {
-            width: 100% !important;
-            border-radius: 8px;
-        }
-        #reader__scan_region {
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        #reader__scan_region > br {
-            display: none;
-        }
-        #reader__dashboard {
-            padding: 10px !important;
-        }
-        #reader__dashboard_section_csr span {
-            font-size: 12px !important;
-        }
+        .pulse-ring { animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
     </style>
 </head>
 <body class="theme-bg-primary min-h-screen">
     <div class="min-h-screen flex flex-col">
         <!-- Header -->
-        <header class="theme-bg-secondary backdrop-blur-md theme-border border-b sticky top-0 z-20 shadow-xl">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <header class="theme-bg-card backdrop-blur-md theme-border border-b sticky top-0 z-20 shadow-sm">
+            <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                 <div class="flex items-center justify-between">
-                    <a href="<?php echo config('app_url'); ?>/" class="flex items-center gap-3">
-                        <div class="w-10 h-10 bg-gradient-to-br from-<?php echo $currentMode['color']; ?>-500 to-<?php echo $currentMode['color']; ?>-600 rounded-xl flex items-center justify-center shadow-sm">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 bg-gradient-to-br <?php echo $currentMode['gradient']; ?> rounded-xl flex items-center justify-center shadow-lg">
                             <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="<?php echo $currentMode['icon']; ?>"/>
                             </svg>
@@ -130,19 +123,18 @@ $currentMode = $modeConfig[$scanMode];
                             <h1 class="text-xl font-bold theme-text-primary"><?php echo e($currentMode['title']); ?></h1>
                             <p class="text-xs theme-text-muted"><?php echo e($currentMode['subtitle']); ?></p>
                         </div>
-                    </a>
+                    </div>
                     <div class="flex items-center gap-3">
-                        <!-- Theme Toggle -->
-                        <button id="themeToggle" class="p-2 rounded-lg hover:bg-gray-700/50 dark-mode:hover:bg-gray-700 light-only:hover:bg-gray-100 transition-colors" aria-label="Toggle theme">
-                            <svg class="w-5 h-5 text-yellow-400 dark-only" fill="currentColor" viewBox="0 0 20 20">
+                        <button id="themeToggle" class="p-2 rounded-lg theme-bg-secondary hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" aria-label="Toggle theme">
+                            <svg class="w-5 h-5 text-yellow-500 dark-only" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"/>
                             </svg>
                             <svg class="w-5 h-5 text-gray-700 light-only" fill="currentColor" viewBox="0 0 20 20">
                                 <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
                             </svg>
                         </button>
-                        <a href="<?php echo config('app_url'); ?>/pages/dashboard.php" class="text-sm font-medium theme-text-secondary hover:text-violet-600 dark-mode:hover:text-violet-400 px-4 py-2 rounded-lg hover:bg-gray-50 dark-mode:hover:bg-gray-700 transition-colors">
-                            ← Back to Dashboard
+                        <a href="<?php echo config('app_url'); ?>/pages/dashboard.php" class="text-sm font-medium theme-text-secondary hover:text-violet-600 px-4 py-2 rounded-lg theme-bg-secondary hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                            ← Dashboard
                         </a>
                     </div>
                 </div>
@@ -151,266 +143,189 @@ $currentMode = $modeConfig[$scanMode];
 
         <!-- Main Content -->
         <main class="flex-1 px-4 sm:px-6 lg:px-8 py-8">
-            <div class="max-w-4xl mx-auto">
+            <div class="max-w-2xl mx-auto">
 
-                <!-- Scan Result Message -->
-                <?php if ($scanResult): ?>
-                    <?php if ($scanResult['success']): ?>
-                        <div id="scanResultMessage" class="bg-green-50 border-2 border-green-200 rounded-2xl p-6 mb-8 shadow-lg transition-all duration-500" role="alert">
-                            <div class="flex items-center">
-                                <div class="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mr-4 flex-shrink-0">
+                <!-- Scan Result Messages -->
+                <?php if ($scanResult && $resultType): ?>
+                    <?php if ($resultType === 'success'): ?>
+                        <!-- Success Message -->
+                        <div id="scanResultMessage" class="bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-300 dark:border-emerald-700 rounded-2xl p-6 mb-8 shadow-lg" role="alert">
+                            <div class="flex items-center gap-4">
+                                <div class="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
                                     <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
                                     </svg>
                                 </div>
                                 <div class="flex-1">
-                                    <p class="text-2xl font-bold text-green-900 mb-1"><?php echo e($scanResult['message']); ?></p>
-                                    <p class="text-sm text-green-700">
-                                        <?php echo e($scanResult['student']['first_name'] . ' ' . $scanResult['student']['last_name']); ?> | 
+                                    <p class="text-xl font-bold text-emerald-800 dark:text-emerald-200"><?php echo e($scanResult['message']); ?></p>
+                                    <p class="text-sm text-emerald-700 dark:text-emerald-300 mt-1">
+                                        <?php echo e($scanResult['student']['first_name'] . ' ' . $scanResult['student']['last_name']); ?>
+                                        <span class="mx-1">•</span>
                                         LRN: <?php echo e($scanResult['student']['lrn'] ?? $scanResult['student']['student_id']); ?>
-                                        <?php if (!empty($scanResult['student']['class'])): ?>
-                                            | <?php echo e($scanResult['student']['class']); ?><?php echo !empty($scanResult['student']['section']) ? '-' . e($scanResult['student']['section']) : ''; ?>
-                                        <?php endif; ?>
-                                        | <span class="font-semibold"><?php echo isset($scanResult['mode']) && $scanResult['mode'] === 'dismissal' ? 'Time Out' : 'Time In'; ?></span>
                                     </p>
-                                    <?php if (isset($scanResult['notification']['sms'])): ?>
-                                    <div class="mt-2 flex flex-wrap gap-2 text-xs">
-                                        <?php $sms = $scanResult['notification']['sms']; ?>
-                                        <?php if ($sms['attempted']): ?>
-                                            <?php if ($sms['success']): ?>
-                                                <span class="inline-flex items-center gap-1 px-2 py-1 bg-green-200 text-green-800 rounded-full">
-                                                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                                                    SMS Sent to <?php echo e($sms['recipient']); ?>
-                                                </span>
-                                            <?php else: ?>
-                                                <span class="inline-flex items-center gap-1 px-2 py-1 bg-red-200 text-red-800 rounded-full" title="<?php echo e($sms['error'] ?? ''); ?>">
-                                                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
-                                                    SMS Failed: <?php echo e($sms['error'] ?? 'Unknown error'); ?>
-                                                </span>
-                                            <?php endif; ?>
-                                        <?php else: ?>
-                                            <span class="inline-flex items-center gap-1 px-2 py-1 bg-gray-200 text-gray-600 rounded-full" title="<?php echo e($sms['error'] ?? 'No phone'); ?>">
-                                                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clip-rule="evenodd"/></svg>
-                                                <?php echo e($sms['error'] ?? 'No SMS sent'); ?>
-                                            </span>
-                                        <?php endif; ?>
-                                    </div>
+                                    <?php if (isset($scanResult['notification']['sms']) && $scanResult['notification']['sms']['success']): ?>
+                                    <p class="text-xs text-emerald-600 dark:text-emerald-400 mt-2 flex items-center gap-1">
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                                        SMS sent to parent
+                                    </p>
                                     <?php endif; ?>
                                 </div>
                             </div>
-                            <!-- Countdown bar -->
-                            <div class="mt-4 h-1 bg-green-200 rounded-full overflow-hidden">
-                                <div id="countdownBar" class="h-full bg-green-500 transition-all duration-100" style="width: 100%"></div>
+                        </div>
+                    
+                    <?php elseif ($resultType === 'already_recorded'): ?>
+                        <!-- Already Recorded Message (Info, not error) -->
+                        <div id="scanResultMessage" class="bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-300 dark:border-blue-700 rounded-2xl p-6 mb-8 shadow-lg" role="alert">
+                            <div class="flex items-center gap-4">
+                                <div class="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="text-xl font-bold text-blue-800 dark:text-blue-200">Already Recorded</p>
+                                    <p class="text-sm text-blue-700 dark:text-blue-300 mt-1"><?php echo e($scanResult['error']['message']); ?></p>
+                                </div>
                             </div>
                         </div>
+                    
+                    <?php elseif ($resultType === 'not_found'): ?>
+                        <!-- Student Not Found -->
+                        <div id="scanResultMessage" class="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 rounded-2xl p-6 mb-8 shadow-lg" role="alert">
+                            <div class="flex items-center gap-4">
+                                <div class="w-16 h-16 bg-amber-500 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                    </svg>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="text-xl font-bold text-amber-800 dark:text-amber-200">Student Not Found</p>
+                                    <p class="text-sm text-amber-700 dark:text-amber-300 mt-1">The scanned barcode doesn't match any student record.</p>
+                                </div>
+                            </div>
+                        </div>
+                    
                     <?php else: ?>
-                        <div id="scanResultMessage" class="bg-red-50 border-2 border-red-200 rounded-2xl p-6 mb-8 shadow-lg transition-all duration-500" role="alert">
-                            <div class="flex items-center">
-                                <div class="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mr-4 flex-shrink-0">
+                        <!-- Generic Error -->
+                        <div id="scanResultMessage" class="bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-700 rounded-2xl p-6 mb-8 shadow-lg" role="alert">
+                            <div class="flex items-center gap-4">
+                                <div class="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
                                     <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path>
                                     </svg>
                                 </div>
                                 <div class="flex-1">
-                                    <p class="text-2xl font-bold text-red-900 mb-1"><?php echo e($scanResult['error']['message']); ?></p>
-                                    <p class="text-sm text-red-700">Please try again</p>
+                                    <p class="text-xl font-bold text-red-800 dark:text-red-200">Scan Error</p>
+                                    <p class="text-sm text-red-700 dark:text-red-300 mt-1"><?php echo e($scanResult['error']['message'] ?? 'An error occurred'); ?></p>
                                 </div>
-                            </div>
-                            <!-- Countdown bar -->
-                            <div class="mt-4 h-1 bg-red-200 rounded-full overflow-hidden">
-                                <div id="countdownBar" class="h-full bg-red-500 transition-all duration-100" style="width: 100%"></div>
                             </div>
                         </div>
                     <?php endif; ?>
+                    
                     <script>
-                        // Auto-hide message after 5 seconds with countdown
-                        (function() {
+                        setTimeout(() => {
                             const msg = document.getElementById('scanResultMessage');
-                            const bar = document.getElementById('countdownBar');
-                            const duration = 5000;
-                            const interval = 50;
-                            let elapsed = 0;
-                            
-                            const countdown = setInterval(() => {
-                                elapsed += interval;
-                                const remaining = Math.max(0, 100 - (elapsed / duration * 100));
-                                bar.style.width = remaining + '%';
-                                
-                                if (elapsed >= duration) {
-                                    clearInterval(countdown);
-                                    msg.style.opacity = '0';
-                                    msg.style.transform = 'translateY(-20px)';
-                                    setTimeout(() => msg.remove(), 500);
-                                }
-                            }, interval);
-                            
-                            // Also log to console for debugging
-                            <?php if ($scanResult['success'] && isset($scanResult['notification'])): ?>
-                            console.log('📱 Notification Status:', <?php echo json_encode($scanResult['notification']); ?>);
-                            <?php endif; ?>
-                        })();
+                            if (msg) {
+                                msg.style.opacity = '0';
+                                msg.style.transform = 'translateY(-10px)';
+                                msg.style.transition = 'all 0.3s ease';
+                                setTimeout(() => msg.remove(), 300);
+                            }
+                        }, 4000);
                     </script>
                 <?php endif; ?>
 
-                <!-- Scanning Interface -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-                    <!-- Hardware Scanner Input -->
-                    <div class="theme-bg-card backdrop-blur-sm rounded-2xl shadow-2xl p-8 theme-border border">
-                        <div class="flex items-center gap-3 mb-6">
-                            <div class="w-12 h-12 bg-violet-500/20 rounded-xl flex items-center justify-center border border-violet-500/30">
-                                <svg class="w-6 h-6 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+                <!-- Mode Switcher -->
+                <div class="flex justify-center mb-8">
+                    <div class="inline-flex rounded-xl p-1 theme-bg-card shadow-lg border theme-border">
+                        <a href="?mode=arrival" 
+                           class="px-6 py-3 rounded-lg text-sm font-semibold transition-all <?php echo $scanMode === 'arrival' ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-md' : 'theme-text-secondary hover:bg-gray-100 dark:hover:bg-gray-700'; ?>">
+                            <span class="flex items-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14"/>
                                 </svg>
-                            </div>
-                            <div>
-                                <h2 class="text-xl font-bold theme-text-primary">Barcode Scanner</h2>
-                                <p class="text-sm theme-text-muted">Use hardware scanner</p>
-                            </div>
-                        </div>
-                        
-                        <form method="POST" action="" id="scanForm" x-data="{ scanning: false }">
-                            <?php echo csrfField(); ?>
-                            <input type="hidden" name="mode" value="<?php echo e($scanMode); ?>">
-                            
-                            <div class="mb-6">
-                                <label for="barcode" class="block text-sm font-medium theme-text-secondary mb-3">
-                                    Scan or Enter Student ID (LRN)
-                                </label>
-                                
-                                <!-- Mode indicator -->
-                                <div class="mb-3 flex items-center justify-between">
-                                    <div class="flex items-center gap-2 text-sm">
-                                        <span class="relative flex h-3 w-3">
-                                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-<?php echo $currentMode['color']; ?>-400 opacity-75"></span>
-                                            <span class="relative inline-flex rounded-full h-3 w-3 bg-<?php echo $currentMode['color']; ?>-500"></span>
-                                        </span>
-                                        <span class="text-<?php echo $currentMode['color']; ?>-600 font-medium">Ready - <?php echo $scanMode === 'arrival' ? 'Time In' : 'Time Out'; ?></span>
-                                    </div>
-                                    <!-- Switch mode link -->
-                                    <a href="?mode=<?php echo $scanMode === 'arrival' ? 'dismissal' : 'arrival'; ?>" 
-                                       class="text-xs text-<?php echo $scanMode === 'arrival' ? 'orange' : 'green'; ?>-500 hover:underline">
-                                        Switch to <?php echo $scanMode === 'arrival' ? 'Dismissal' : 'Arrival'; ?>
-                                    </a>
-                                </div>
-                                
-                                <input 
-                                    type="text" 
-                                    id="barcode" 
-                                    name="barcode" 
-                                    class="w-full px-4 py-5 bg-gray-900/50 dark-mode:bg-gray-900/50 light-only:bg-gray-50 border-2 border-<?php echo $currentMode['color']; ?>-500/50 rounded-xl focus:ring-4 focus:ring-<?php echo $currentMode['color']; ?>-500/30 focus:border-<?php echo $currentMode['color']; ?>-500 text-xl font-mono theme-text-primary placeholder-gray-500 text-center transition-all"
-                                    placeholder="Scan or type LRN here..."
-                                    autofocus
-                                    autocomplete="off"
-                                >
-                                <p class="mt-3 text-sm theme-text-muted flex items-center justify-center gap-2">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                    </svg>
-                                    Scanner auto-submits • Manual entry: click Submit button
-                                </p>
-                            </div>
-                            
-                            <!-- Status indicator -->
-                            <div id="scanStatus" class="hidden mb-4 p-3 rounded-xl text-center">
-                                <div class="flex items-center justify-center gap-2">
-                                    <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                    <span>Processing scan...</span>
-                                </div>
-                            </div>
-                            
-                            <button 
-                                type="submit" 
-                                id="submitBtn"
-                                class="w-full bg-gradient-to-r from-<?php echo $currentMode['color']; ?>-500 to-<?php echo $currentMode['color']; ?>-600 text-white px-6 py-4 rounded-xl hover:from-<?php echo $currentMode['color']; ?>-600 hover:to-<?php echo $currentMode['color']; ?>-700 focus:outline-none focus:ring-2 focus:ring-<?php echo $currentMode['color']; ?>-500 focus:ring-offset-2 font-semibold text-lg shadow-lg transition-all"
-                            >
-                                <?php echo $scanMode === 'arrival' ? 'Record Arrival' : 'Record Dismissal'; ?>
-                            </button>
-                        </form>
-                    </div>
-
-
-                    <!-- Camera Scanner -->
-                    <div class="theme-bg-card backdrop-blur-sm rounded-2xl shadow-2xl p-8 theme-border border">
-                        <div class="flex items-center gap-3 mb-6">
-                            <div class="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center border border-blue-500/30">
-                                <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                Time In
+                            </span>
+                        </a>
+                        <a href="?mode=dismissal" 
+                           class="px-6 py-3 rounded-lg text-sm font-semibold transition-all <?php echo $scanMode === 'dismissal' ? 'bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-md' : 'theme-text-secondary hover:bg-gray-100 dark:hover:bg-gray-700'; ?>">
+                            <span class="flex items-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7"/>
                                 </svg>
-                            </div>
-                            <div>
-                                <h2 class="text-xl font-bold theme-text-primary">Camera Scanner</h2>
-                                <p class="text-sm theme-text-muted">Use device camera</p>
-                            </div>
-                        </div>
-                        
-                        <div id="camera-scanner" x-data="{ scanning: false }" x-init="<?php if (!$scanResult): ?>setTimeout(() => { scanning = true; $nextTick(() => startCamera()); }, 500)<?php endif; ?>">
-                            <div x-show="!scanning" class="text-center py-8">
-                                <div class="w-20 h-20 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
-                                    <svg class="w-10 h-10 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-                                    </svg>
-                                </div>
-                                <button 
-                                    @click="scanning = true; $nextTick(() => startCamera())"
-                                    class="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-4 rounded-xl hover:from-blue-600 hover:to-blue-700 hover:shadow-blue-500/50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-lg shadow-lg transition-all"
-                                >
-                                    Start Camera Scanner
-                                </button>
-                                <p class="mt-4 text-sm theme-text-muted">
-                                    Fast barcode detection with camera
-                                </p>
-                            </div>
-                            
-                            <div x-show="scanning" x-cloak>
-                                <div id="reader" class="mb-4"></div>
-                                
-                                <button 
-                                    @click="scanning = false; stopCamera()"
-                                    class="w-full bg-red-500 text-white px-6 py-4 rounded-xl hover:bg-red-600 hover:shadow-red-500/50 focus:outline-none focus:ring-2 focus:ring-red-500 font-semibold shadow-lg transition-all"
-                                >
-                                    Stop Camera
-                                </button>
-                                
-                                <p class="mt-4 text-sm theme-text-muted text-center flex items-center justify-center gap-2">
-                                    <svg class="w-4 h-4 animate-pulse text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                                        <circle cx="10" cy="10" r="8"/>
-                                    </svg>
-                                    Point camera at barcode - auto-detects instantly
-                                </p>
-                            </div>
-                        </div>
+                                Time Out
+                            </span>
+                        </a>
                     </div>
                 </div>
 
-                <!-- Instructions -->
-                <div class="mt-8 theme-bg-card backdrop-blur-sm theme-border border rounded-2xl p-6">
-                    <h3 class="text-lg font-semibold theme-text-primary mb-3 flex items-center gap-2">
-                        <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <!-- Scanner Card -->
+                <div class="theme-bg-card rounded-3xl shadow-2xl p-8 theme-border border">
+                    <!-- Scanner Icon with Pulse -->
+                    <div class="flex justify-center mb-6">
+                        <div class="relative">
+                            <div class="absolute inset-0 bg-<?php echo $currentMode['color']; ?>-500/30 rounded-full pulse-ring"></div>
+                            <div class="relative w-24 h-24 bg-gradient-to-br <?php echo $currentMode['gradient']; ?> rounded-full flex items-center justify-center shadow-xl">
+                                <svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <h2 class="text-2xl font-bold theme-text-primary text-center mb-2">Ready to Scan</h2>
+                    <p class="text-center theme-text-muted mb-8">Use your barcode scanner to record attendance</p>
+                    
+                    <form method="POST" action="" id="scanForm">
+                        <?php echo csrfField(); ?>
+                        <input type="hidden" name="mode" value="<?php echo e($scanMode); ?>">
+                        
+                        <div class="mb-6">
+                            <input 
+                                type="text" 
+                                id="barcode" 
+                                name="barcode" 
+                                class="w-full px-6 py-5 theme-bg-secondary border-2 border-<?php echo $currentMode['color']; ?>-400 dark:border-<?php echo $currentMode['color']; ?>-600 rounded-2xl focus:ring-4 focus:ring-<?php echo $currentMode['color']; ?>-500/30 focus:border-<?php echo $currentMode['color']; ?>-500 text-2xl font-mono theme-text-primary placeholder-gray-400 text-center transition-all"
+                                placeholder="Scan barcode here..."
+                                autofocus
+                                autocomplete="off"
+                            >
+                        </div>
+                        
+                        <button 
+                            type="submit" 
+                            id="submitBtn"
+                            class="w-full bg-gradient-to-r <?php echo $currentMode['gradient']; ?> text-white px-6 py-4 rounded-xl hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-<?php echo $currentMode['color']; ?>-500/30 font-semibold text-lg transition-all disabled:opacity-50"
+                        >
+                            Record <?php echo $scanMode === 'arrival' ? 'Arrival' : 'Dismissal'; ?>
+                        </button>
+                    </form>
+                    
+                    <p class="mt-6 text-sm theme-text-muted text-center">
+                        Scanner auto-submits when barcode is detected
+                    </p>
+                </div>
+
+                <!-- Quick Tips -->
+                <div class="mt-8 theme-bg-card rounded-2xl p-6 theme-border border">
+                    <h3 class="text-sm font-semibold theme-text-primary mb-3 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
-                        How to Check In
+                        Quick Tips
                     </h3>
-                    <ul class="space-y-2 text-sm theme-text-secondary">
-                        <li class="flex items-start gap-2">
-                            <span class="font-bold text-violet-400">1.</span>
-                            <span>Click on the barcode input field or start the camera scanner</span>
+                    <ul class="space-y-2 text-sm theme-text-muted">
+                        <li class="flex items-center gap-2">
+                            <span class="w-1.5 h-1.5 bg-violet-500 rounded-full"></span>
+                            Point scanner at student's ID barcode
                         </li>
-                        <li class="flex items-start gap-2">
-                            <span class="font-bold text-violet-400">2.</span>
-                            <span>Scan your student ID barcode using a scanner or camera</span>
+                        <li class="flex items-center gap-2">
+                            <span class="w-1.5 h-1.5 bg-violet-500 rounded-full"></span>
+                            Wait for confirmation message
                         </li>
-                        <li class="flex items-start gap-2">
-                            <span class="font-bold text-violet-400">3.</span>
-                            <span>Wait for confirmation message to appear</span>
-                        </li>
-                        <li class="flex items-start gap-2">
-                            <span class="font-bold text-violet-400">4.</span>
-                            <span>You're done! Your attendance has been recorded</span>
+                        <li class="flex items-center gap-2">
+                            <span class="w-1.5 h-1.5 bg-violet-500 rounded-full"></span>
+                            Switch between Time In/Out using buttons above
                         </li>
                     </ul>
                 </div>
@@ -418,52 +333,46 @@ $currentMode = $modeConfig[$scanMode];
         </main>
 
         <!-- Footer -->
-        <footer class="theme-bg-secondary theme-border border-t py-6 mt-8">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <p class="text-center text-sm theme-text-muted">
-                    Need help? Contact your administrator
+        <footer class="theme-bg-card theme-border border-t py-4 mt-auto">
+            <div class="max-w-4xl mx-auto px-4">
+                <p class="text-center text-xs theme-text-muted">
+                    Logged in as <?php echo e($currentUser['full_name']); ?> • <?php echo date('F j, Y'); ?>
                 </p>
             </div>
         </footer>
     </div>
 
-    <!-- Html5-QRCode - Much faster barcode scanner -->
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script>
         (function() {
             const barcodeInput = document.getElementById('barcode');
             const scanForm = document.getElementById('scanForm');
-            const scanStatus = document.getElementById('scanStatus');
             const submitBtn = document.getElementById('submitBtn');
             
-            let html5QrCode = null;
             let lastInputTime = 0;
             let inputBuffer = [];
             let submitTimeout = null;
             const MIN_BARCODE_LENGTH = 6;
-            const SCANNER_SPEED_THRESHOLD = 50; // ms between characters for scanner detection
-            const SCANNER_SUBMIT_DELAY = 100; // ms to wait after fast input before submitting
+            const SCANNER_SPEED_THRESHOLD = 50;
+            const SCANNER_SUBMIT_DELAY = 100;
             
-            // Focus input on page load
             barcodeInput.focus();
             
-            // Re-focus when clicking anywhere on the page (except buttons)
+            // Re-focus when clicking anywhere
             document.addEventListener('click', function(e) {
-                if (!e.target.closest('button') && !e.target.closest('a') && !e.target.closest('#reader')) {
+                if (!e.target.closest('button') && !e.target.closest('a')) {
                     barcodeInput.focus();
                 }
             });
             
-            // Auto-reset after showing result
+            // Auto-reset after result
             <?php if ($scanResult): ?>
-            setTimeout(function() {
+            setTimeout(() => {
                 barcodeInput.value = '';
                 barcodeInput.focus();
-            }, 3000);
+            }, 500);
             <?php endif; ?>
             
-            // Hardware scanner detection - only auto-submit for fast scanner input
-            // Manual typing will NOT auto-submit
+            // Hardware scanner detection
             barcodeInput.addEventListener('input', function(e) {
                 const currentTime = Date.now();
                 const timeSinceLastInput = currentTime - lastInputTime;
@@ -471,130 +380,49 @@ $currentMode = $modeConfig[$scanMode];
                 
                 if (submitTimeout) clearTimeout(submitTimeout);
                 
-                // Track input speed to detect scanner vs manual typing
                 if (timeSinceLastInput < SCANNER_SPEED_THRESHOLD && lastInputTime > 0) {
-                    // Fast input detected - likely a barcode scanner
                     inputBuffer.push(currentTime);
                 } else {
-                    // Slow input - manual typing, reset buffer
                     inputBuffer = [currentTime];
                 }
                 
                 lastInputTime = currentTime;
                 
-                // Only auto-submit if we detected fast scanner input (multiple fast characters)
-                // This prevents auto-submit during manual typing
+                // Auto-submit for scanner input
                 if (currentValue.length >= MIN_BARCODE_LENGTH && inputBuffer.length >= 4) {
-                    submitTimeout = setTimeout(function() {
+                    submitTimeout = setTimeout(() => {
                         if (barcodeInput.value.trim().length >= MIN_BARCODE_LENGTH) {
-                            showProcessing();
+                            submitBtn.disabled = true;
                             scanForm.submit();
                         }
                     }, SCANNER_SUBMIT_DELAY);
                 }
             });
             
-            // Enter key handler - for manual submission
+            // Enter key for manual submission
             barcodeInput.addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
-                    const value = barcodeInput.value.trim();
-                    if (value.length >= MIN_BARCODE_LENGTH) {
-                        showProcessing();
+                    if (barcodeInput.value.trim().length >= MIN_BARCODE_LENGTH) {
+                        submitBtn.disabled = true;
                         scanForm.submit();
                     }
                 }
             });
             
-            // Reset input buffer when field is cleared or focused
             barcodeInput.addEventListener('focus', function() {
                 inputBuffer = [];
                 lastInputTime = 0;
             });
             
-            // Form validation
             scanForm.addEventListener('submit', function(e) {
-                const value = barcodeInput.value.trim();
-                if (value.length < MIN_BARCODE_LENGTH) {
+                if (barcodeInput.value.trim().length < MIN_BARCODE_LENGTH) {
                     e.preventDefault();
                     barcodeInput.focus();
-                    barcodeInput.classList.add('border-amber-500');
-                    setTimeout(() => barcodeInput.classList.remove('border-amber-500'), 2000);
                     return false;
                 }
-                showProcessing();
-            });
-            
-            function showProcessing() {
-                scanStatus.classList.remove('hidden');
-                scanStatus.classList.add('bg-violet-100', 'text-violet-700');
                 submitBtn.disabled = true;
-                submitBtn.classList.add('opacity-50');
-            }
-            
-            // Camera scanner using Html5-QRCode
-            window.startCamera = function() {
-                // Small delay to ensure DOM is ready
-                setTimeout(() => {
-                    html5QrCode = new Html5Qrcode("reader", {
-                        formatsToSupport: [
-                            Html5QrcodeSupportedFormats.QR_CODE,
-                            Html5QrcodeSupportedFormats.CODE_128,
-                            Html5QrcodeSupportedFormats.CODE_39,
-                            Html5QrcodeSupportedFormats.EAN_13,
-                            Html5QrcodeSupportedFormats.EAN_8,
-                            Html5QrcodeSupportedFormats.ITF,
-                            Html5QrcodeSupportedFormats.CODABAR
-                        ]
-                    });
-                    
-                    const config = {
-                        fps: 10,
-                        qrbox: { width: 300, height: 150 },
-                        aspectRatio: 1.5
-                    };
-                    
-                    html5QrCode.start(
-                        { facingMode: "environment" },
-                        config,
-                        (decodedText) => {
-                            console.log("SUCCESS! Barcode:", decodedText);
-                            
-                            // Vibrate on success
-                            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-                            
-                            // Stop camera and submit
-                            html5QrCode.stop().then(() => {
-                                barcodeInput.value = decodedText;
-                                showProcessing();
-                                scanForm.submit();
-                            }).catch(() => {
-                                barcodeInput.value = decodedText;
-                                showProcessing();
-                                scanForm.submit();
-                            });
-                        },
-                        (errorMessage) => {
-                            // Silent - no barcode detected yet
-                        }
-                    ).catch(err => {
-                        console.error("Camera error:", err);
-                        alert("Could not start camera: " + err);
-                    });
-                }, 100);
-            };
-
-            window.stopCamera = function() {
-                if (html5QrCode) {
-                    html5QrCode.stop().then(() => {
-                        html5QrCode.clear();
-                        html5QrCode = null;
-                    }).catch(err => {
-                        console.log("Stop error:", err);
-                        html5QrCode = null;
-                    });
-                }
-            };
+            });
         })();
     </script>
 </body>
