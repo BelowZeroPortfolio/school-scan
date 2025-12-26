@@ -657,9 +657,9 @@ function processBarcodeScan($barcode, $mode = 'arrival') {
             ];
         }
         
-        // Send notification if function exists
+        // Send notification if function exists and student has SMS enabled
         $notificationResult = null;
-        if (function_exists('sendAttendanceNotification')) {
+        if (function_exists('sendAttendanceNotificationWithStatus')) {
             $notificationResult = sendAttendanceNotificationWithStatus($student);
         }
         

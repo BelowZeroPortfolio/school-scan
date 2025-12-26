@@ -1,6 +1,8 @@
 # Environment files
 .env
 
+/storage/
+
 # Composer
 /vendor/
 

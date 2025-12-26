@@ -163,11 +163,24 @@ if ($scanResult) {
                                         <span class="mx-1">•</span>
                                         LRN: <?php echo e($scanResult['student']['lrn'] ?? $scanResult['student']['student_id']); ?>
                                     </p>
-                                    <?php if (isset($scanResult['notification']['sms']) && $scanResult['notification']['sms']['success']): ?>
+                                    <?php if (isset($scanResult['notification']['sms'])): ?>
+                                        <?php $sms = $scanResult['notification']['sms']; ?>
+                                        <?php if ($sms['success']): ?>
                                     <p class="text-xs text-emerald-600 dark:text-emerald-400 mt-2 flex items-center gap-1">
                                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
                                         SMS sent to parent
                                     </p>
+                                        <?php elseif ($sms['attempted'] && !$sms['success']): ?>
+                                    <p class="text-xs text-red-600 dark:text-red-400 mt-2 flex items-center gap-1">
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                                        SMS failed: <?php echo e($sms['error'] ?? 'Unknown error'); ?>
+                                    </p>
+                                        <?php elseif (!$sms['attempted']): ?>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 flex items-center gap-1">
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                                        <?php echo e($sms['error'] ?? 'SMS not sent'); ?>
+                                    </p>
+                                        <?php endif; ?>
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -349,81 +362,199 @@ if ($scanResult) {
             const submitBtn = document.getElementById('submitBtn');
             
             let lastInputTime = 0;
-            let inputBuffer = [];
+            let scanBuffer = '';
             let submitTimeout = null;
+            let isProcessing = false;
+            let lastSubmitTime = 0;
+            
+            // Configuration optimized for GOOJPRT 2D Barcode Scanner
             const MIN_BARCODE_LENGTH = 6;
-            const SCANNER_SPEED_THRESHOLD = 50;
-            const SCANNER_SUBMIT_DELAY = 100;
+            const SCANNER_SUBMIT_DELAY = 100; // ms to wait after last character before submitting
+            const DEBOUNCE_TIME = 1500; // Prevent double scans within this time
+            const SCAN_COMPLETE_CHARS = ['\r', '\n', '\t']; // Characters that indicate scan complete
             
-            barcodeInput.focus();
+            // Focus input on page load
+            setTimeout(() => barcodeInput.focus(), 100);
             
-            // Re-focus when clicking anywhere
+            // Re-focus when clicking anywhere on page
             document.addEventListener('click', function(e) {
-                if (!e.target.closest('button') && !e.target.closest('a')) {
+                if (!e.target.closest('button') && !e.target.closest('a') && !isProcessing) {
                     barcodeInput.focus();
                 }
             });
             
-            // Auto-reset after result
+            // Re-focus when window gains focus
+            window.addEventListener('focus', function() {
+                if (!isProcessing) {
+                    setTimeout(() => barcodeInput.focus(), 50);
+                }
+            });
+            
+            // Auto-reset after showing result
             <?php if ($scanResult): ?>
             setTimeout(() => {
                 barcodeInput.value = '';
+                scanBuffer = '';
                 barcodeInput.focus();
-            }, 500);
+                isProcessing = false;
+            }, 300);
             <?php endif; ?>
             
-            // Hardware scanner detection
+            // Clean barcode input - remove special characters that scanner might add
+            function cleanBarcode(value) {
+                // Remove carriage return, newline, tab, and trim whitespace
+                // Also remove any non-printable characters
+                return value.replace(/[\r\n\t\x00-\x1F\x7F]/g, '').trim();
+            }
+            
+            // Submit the form
+            function submitScan() {
+                const barcode = cleanBarcode(barcodeInput.value);
+                const now = Date.now();
+                
+                // Prevent double submission
+                if (now - lastSubmitTime < DEBOUNCE_TIME) {
+                    console.log('Debounced - too soon after last scan');
+                    return;
+                }
+                
+                if (barcode.length >= MIN_BARCODE_LENGTH && !isProcessing) {
+                    isProcessing = true;
+                    lastSubmitTime = now;
+                    submitBtn.disabled = true;
+                    barcodeInput.value = barcode; // Set cleaned value
+                    barcodeInput.readOnly = true; // Prevent further input
+                    
+                    // Visual feedback
+                    barcodeInput.classList.add('bg-green-100', 'dark:bg-green-900/30');
+                    submitBtn.innerHTML = '<span class="flex items-center justify-center gap-2"><svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Processing...</span>';
+                    
+                    console.log('Submitting barcode:', barcode);
+                    
+                    // Submit form
+                    scanForm.submit();
+                }
+            }
+            
+            // Hardware scanner detection - GOOJPRT sends characters very fast then Enter/Tab
             barcodeInput.addEventListener('input', function(e) {
+                if (isProcessing) return;
+                
                 const currentTime = Date.now();
-                const timeSinceLastInput = currentTime - lastInputTime;
-                const currentValue = e.target.value.trim();
+                const currentValue = e.target.value;
                 
-                if (submitTimeout) clearTimeout(submitTimeout);
-                
-                if (timeSinceLastInput < SCANNER_SPEED_THRESHOLD && lastInputTime > 0) {
-                    inputBuffer.push(currentTime);
-                } else {
-                    inputBuffer = [currentTime];
+                // Clear any pending submit
+                if (submitTimeout) {
+                    clearTimeout(submitTimeout);
+                    submitTimeout = null;
                 }
                 
                 lastInputTime = currentTime;
                 
-                // Auto-submit for scanner input
-                if (currentValue.length >= MIN_BARCODE_LENGTH && inputBuffer.length >= 4) {
+                // Check if we have enough characters for a valid barcode
+                const cleanedValue = cleanBarcode(currentValue);
+                if (cleanedValue.length >= MIN_BARCODE_LENGTH) {
+                    // Wait a short time for scanner to finish sending all characters
                     submitTimeout = setTimeout(() => {
-                        if (barcodeInput.value.trim().length >= MIN_BARCODE_LENGTH) {
-                            submitBtn.disabled = true;
-                            scanForm.submit();
-                        }
+                        submitScan();
                     }, SCANNER_SUBMIT_DELAY);
                 }
             });
             
-            // Enter key for manual submission
-            barcodeInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
+            // Handle Enter key (GOOJPRT usually sends Enter at end of scan)
+            barcodeInput.addEventListener('keydown', function(e) {
+                if (isProcessing) return;
+                
+                // Enter, Tab, or carriage return - common scanner terminators
+                if (e.key === 'Enter' || e.key === 'Tab' || e.keyCode === 13 || e.keyCode === 9) {
                     e.preventDefault();
-                    if (barcodeInput.value.trim().length >= MIN_BARCODE_LENGTH) {
-                        submitBtn.disabled = true;
-                        scanForm.submit();
+                    e.stopPropagation();
+                    
+                    // Clear any pending timeout
+                    if (submitTimeout) {
+                        clearTimeout(submitTimeout);
+                        submitTimeout = null;
                     }
-                }
-            });
-            
-            barcodeInput.addEventListener('focus', function() {
-                inputBuffer = [];
-                lastInputTime = 0;
-            });
-            
-            scanForm.addEventListener('submit', function(e) {
-                if (barcodeInput.value.trim().length < MIN_BARCODE_LENGTH) {
-                    e.preventDefault();
-                    barcodeInput.focus();
+                    
+                    const barcode = cleanBarcode(barcodeInput.value);
+                    if (barcode.length >= MIN_BARCODE_LENGTH) {
+                        submitScan();
+                    } else if (barcode.length > 0) {
+                        // Show error for short barcode
+                        barcodeInput.classList.add('border-red-500', 'shake');
+                        setTimeout(() => {
+                            barcodeInput.classList.remove('border-red-500', 'shake');
+                        }, 500);
+                    }
                     return false;
                 }
-                submitBtn.disabled = true;
             });
+            
+            // Also capture keypress for Enter (backup)
+            barcodeInput.addEventListener('keypress', function(e) {
+                if (isProcessing) return;
+                
+                if (e.key === 'Enter' || e.keyCode === 13) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    if (submitTimeout) {
+                        clearTimeout(submitTimeout);
+                        submitTimeout = null;
+                    }
+                    
+                    const barcode = cleanBarcode(barcodeInput.value);
+                    if (barcode.length >= MIN_BARCODE_LENGTH) {
+                        submitScan();
+                    }
+                    return false;
+                }
+            });
+            
+            // Reset on focus
+            barcodeInput.addEventListener('focus', function() {
+                if (!isProcessing) {
+                    scanBuffer = '';
+                    lastInputTime = 0;
+                    barcodeInput.readOnly = false;
+                    barcodeInput.select(); // Select all text for easy replacement
+                }
+            });
+            
+            // Form submit validation
+            scanForm.addEventListener('submit', function(e) {
+                const barcode = cleanBarcode(barcodeInput.value);
+                
+                if (barcode.length < MIN_BARCODE_LENGTH) {
+                    e.preventDefault();
+                    barcodeInput.focus();
+                    barcodeInput.classList.add('border-red-500');
+                    setTimeout(() => {
+                        barcodeInput.classList.remove('border-red-500');
+                    }, 500);
+                    return false;
+                }
+                
+                isProcessing = true;
+            });
+            
+            // Prevent form resubmission on page refresh
+            if (window.history.replaceState) {
+                window.history.replaceState(null, null, window.location.href);
+            }
+            
+            // Debug: Log scanner input (remove in production)
+            console.log('GOOJPRT Scanner Ready - Focus on input field');
         })();
     </script>
+    
+    <style>
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .shake { animation: shake 0.3s ease-in-out; }
+    </style>
 </body>
 </html>

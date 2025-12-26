@@ -169,7 +169,7 @@ if (isPost()) {
                 $formData['date_of_birth'] ?: null,
                 $formData['previous_school'] ?: null,
             ];
-            
+
             $studentId = dbInsert($sql, $params);
             
             // Auto-enroll student in selected class with enrollment type (Requirements: 6.2)
