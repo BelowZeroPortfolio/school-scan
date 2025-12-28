@@ -1,7 +1,7 @@
 <?php
 /**
- * Barcode Scanning Page
- * Interface for scanning student barcodes and recording attendance
+ * QR Code Scanning Page
+ * Interface for scanning student QR codes and recording attendance
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -133,14 +133,14 @@ $todayStats = getTodayAttendanceStats();
                         
                         <div class="mb-6">
                             <label for="barcode" class="block text-sm font-medium text-gray-700 mb-2">
-                                Barcode Input
+                                QR Code Input
                             </label>
                             <input 
                                 type="text" 
                                 id="barcode" 
                                 name="barcode" 
                                 class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent text-lg"
-                                placeholder="Scan barcode here..."
+                                placeholder="Scan QR code here..."
                                 autofocus
                                 autocomplete="off"
                             >

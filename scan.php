@@ -330,7 +330,7 @@ if ($scanResult) {
                     <ul class="space-y-2 text-sm theme-text-muted">
                         <li class="flex items-center gap-2">
                             <span class="w-1.5 h-1.5 bg-violet-500 rounded-full"></span>
-                            Point scanner at student's ID barcode
+                            Point scanner at student's ID QR code
                         </li>
                         <li class="flex items-center gap-2">
                             <span class="w-1.5 h-1.5 bg-violet-500 rounded-full"></span>
@@ -367,7 +367,7 @@ if ($scanResult) {
             let isProcessing = false;
             let lastSubmitTime = 0;
             
-            // Configuration optimized for GOOJPRT 2D Barcode Scanner
+            // Configuration optimized for GOOJPRT 2D QR Scanner
             const MIN_BARCODE_LENGTH = 6;
             const SCANNER_SUBMIT_DELAY = 100; // ms to wait after last character before submitting
             const DEBOUNCE_TIME = 1500; // Prevent double scans within this time

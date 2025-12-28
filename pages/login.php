@@ -98,7 +98,7 @@ if (isPost()) {
                             </svg>
                         </div>
                         <div>
-                            <h1 class="text-xl font-bold theme-text-primary">Barcode Attendance</h1>
+                            <h1 class="text-xl font-bold theme-text-primary">QR Attendance</h1>
                             <p class="text-xs theme-text-muted">Smart Attendance System</p>
                         </div>
                     </a>
@@ -250,7 +250,7 @@ if (isPost()) {
         <footer class="theme-bg-secondary theme-border border-t py-6">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <p class="text-center text-sm theme-text-muted">
-                    © <?php echo date('Y'); ?> Barcode Attendance System. All rights reserved.
+                    © <?php echo date('Y'); ?> QR Attendance System. All rights reserved.
                 </p>
             </div>
         </footer>

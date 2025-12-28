@@ -155,7 +155,7 @@ $sampleStudent = dbFetchOne("SELECT * FROM students WHERE is_active = 1 LIMIT 1"
                                     <path d="M2 4h2v16H2V4zm4 0h1v16H6V4zm3 0h2v16H9V4zm4 0h1v16h-1V4zm3 0h2v16h-2V4zm4 0h2v16h-2V4z"/>
                                 </svg>
                             </div>
-                            <span class="text-sm font-medium text-gray-700">Barcode</span>
+                            <span class="text-sm font-medium text-gray-700">QR Code</span>
                         </div>
                         
                         <div draggable="true" @dragstart="dragStart($event, 'shape')"

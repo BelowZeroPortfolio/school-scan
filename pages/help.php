@@ -31,11 +31,11 @@ $currentUser = getCurrentUser();
             <div class="bg-white rounded-xl border border-gray-100 p-6">
                 <h2 class="text-lg font-semibold text-gray-900 mb-4">Getting Started</h2>
                 <div class="space-y-3 text-sm text-gray-600">
-                    <p>Welcome to the Barcode Attendance System. This system helps you track student attendance using barcode scanning.</p>
+                    <p>Welcome to the QR Attendance System. This system helps you track student attendance using QR code scanning.</p>
                     <ul class="list-disc list-inside space-y-2 ml-2">
-                        <li>Add students with their LRN to generate unique barcodes</li>
-                        <li>Print barcodes for student ID cards</li>
-                        <li>Scan barcodes to record attendance</li>
+                        <li>Add students with their LRN to generate unique QR codes</li>
+                        <li>Print QR codes for student ID cards</li>
+                        <li>Scan QR codes to record attendance</li>
                         <li>View reports and attendance history</li>
                     </ul>
                 </div>
@@ -51,7 +51,7 @@ $currentUser = getCurrentUser();
                     </div>
                     <div>
                         <h3 class="font-medium text-gray-900">How do I scan attendance?</h3>
-                        <p class="text-sm text-gray-600 mt-1">Use a barcode scanner connected to your computer. The system will automatically record attendance when a valid barcode is scanned.</p>
+                        <p class="text-sm text-gray-600 mt-1">Use a QR scanner connected to your computer. The system will automatically record attendance when a valid QR code is scanned.</p>
                     </div>
                     <div>
                         <h3 class="font-medium text-gray-900">How do I export attendance reports?</h3>

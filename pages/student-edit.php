@@ -312,13 +312,13 @@ $currentUser = getCurrentUser();
                             </div>
                         </div>
                         
-                        <!-- Regenerate Barcode -->
+                        <!-- Regenerate QR Code -->
                         <div>
                             <div class="flex items-center">
                                 <input type="checkbox" name="regenerate_barcode" id="regenerate_barcode" value="1"
                                     class="h-4 w-4 text-violet-600 focus:ring-violet-500 border-gray-300 rounded">
                                 <label for="regenerate_barcode" class="ml-2 block text-sm text-gray-900">
-                                    Regenerate barcode (use if barcode won't scan)
+                                    Regenerate QR code (use if QR code won't scan)
                                 </label>
                             </div>
                         </div>
