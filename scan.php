@@ -1,8 +1,8 @@
 <?php
 /**
- * Barcode Scanning Page
- * Teachers/Operators scan student barcodes for attendance
- * Optimized for GOOJPRT 2D Barcode Scanner (hardware)
+ * QR Code Scanning Page
+ * Teachers/Operators scan student QR codes for attendance
+ * Optimized for GOOJPRT 2D QR Scanner (hardware)
  */
 
 require_once __DIR__ . '/config/config.php';
@@ -213,7 +213,7 @@ if ($scanResult) {
                                 </div>
                                 <div class="flex-1">
                                     <p class="text-xl font-bold text-amber-800 dark:text-amber-200">Student Not Found</p>
-                                    <p class="text-sm text-amber-700 dark:text-amber-300 mt-1">The scanned barcode doesn't match any student record.</p>
+                                    <p class="text-sm text-amber-700 dark:text-amber-300 mt-1">The scanned QR code doesn't match any student record.</p>
                                 </div>
                             </div>
                         </div>
@@ -287,7 +287,7 @@ if ($scanResult) {
                     </div>
                     
                     <h2 class="text-2xl font-bold theme-text-primary text-center mb-2">Ready to Scan</h2>
-                    <p class="text-center theme-text-muted mb-8">Use your barcode scanner to record attendance</p>
+                    <p class="text-center theme-text-muted mb-8">Use your QR scanner to record attendance</p>
                     
                     <form method="POST" action="" id="scanForm">
                         <?php echo csrfField(); ?>
@@ -299,7 +299,7 @@ if ($scanResult) {
                                 id="barcode" 
                                 name="barcode" 
                                 class="w-full px-6 py-5 theme-bg-secondary border-2 border-<?php echo $currentMode['color']; ?>-400 dark:border-<?php echo $currentMode['color']; ?>-600 rounded-2xl focus:ring-4 focus:ring-<?php echo $currentMode['color']; ?>-500/30 focus:border-<?php echo $currentMode['color']; ?>-500 text-2xl font-mono theme-text-primary placeholder-gray-400 text-center transition-all"
-                                placeholder="Scan barcode here..."
+                                placeholder="Scan QR code here..."
                                 autofocus
                                 autocomplete="off"
                             >
@@ -315,7 +315,7 @@ if ($scanResult) {
                     </form>
                     
                     <p class="mt-6 text-sm theme-text-muted text-center">
-                        Scanner auto-submits when barcode is detected
+                        Scanner auto-submits when QR code is detected
                     </p>
                 </div>
 

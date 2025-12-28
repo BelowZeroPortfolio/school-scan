@@ -1,7 +1,7 @@
 <?php
 /**
  * Landing Page
- * Public-facing marketing page for the Barcode Attendance System
+ * Public-facing marketing page for the QR Attendance System
  */
 
 require_once __DIR__ . '/config/config.php';
@@ -16,7 +16,7 @@ if (isLoggedIn()) {
     exit;
 }
 
-$appName = config('app_name', 'Barcode Attendance System');
+$appName = config('app_name', 'QR Attendance System');
 ?>
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
@@ -52,7 +52,7 @@ $appName = config('app_name', 'Barcode Attendance System');
                 <div class="w-10 h-10 rounded-xl overflow-hidden">
                     <img src="<?php echo config('app_url'); ?>/assets/images/lex.png" alt="Logo" class="w-full h-full object-contain">
                 </div>
-                <span class="hidden sm:block text-lg font-bold theme-text-primary">Barcode Attendance</span>
+                <span class="hidden sm:block text-lg font-bold theme-text-primary">QR Attendance</span>
             </a>
             <div class="hidden md:flex items-center gap-8">
                 <a href="#features" class="text-sm font-medium theme-text-secondary hover:text-violet-600">Features</a>
@@ -94,7 +94,7 @@ $appName = config('app_name', 'Barcode Attendance System');
                     Modern School <span class="gradient-text">Attendance</span> Made Simple
                 </h1>
                 <p class="text-lg theme-text-secondary mb-8 max-w-xl mx-auto lg:mx-0">
-                    Streamline your school's attendance tracking with our barcode-based system. Fast scanning, real-time notifications, and comprehensive reports.
+                    Streamline your school's attendance tracking with our QR code-based system. Fast scanning, real-time notifications, and comprehensive reports.
                 </p>
                 <div class="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
                     <a href="<?php echo config('app_url'); ?>/pages/login.php" class="inline-flex items-center justify-center px-8 py-4 bg-violet-600 text-white font-semibold rounded-xl hover:bg-violet-700 shadow-lg shadow-violet-500/30">
@@ -141,8 +141,8 @@ $appName = config('app_name', 'Barcode Attendance System');
                 <div class="w-14 h-14 bg-violet-100 dark-mode:bg-violet-900/30 rounded-2xl flex items-center justify-center mb-6">
                     <svg class="w-7 h-7 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
                 </div>
-                <h3 class="text-xl font-bold theme-text-primary mb-3">Barcode Scanning</h3>
-                <p class="theme-text-secondary">Fast and accurate barcode scanning using hardware scanners or device cameras.</p>
+                <h3 class="text-xl font-bold theme-text-primary mb-3">QR Code Scanning</h3>
+                <p class="theme-text-secondary">Fast and accurate QR code scanning using hardware scanners or device cameras.</p>
             </div>
             <div class="theme-bg-card rounded-2xl p-8 border theme-border hover:shadow-xl transition-all">
                 <div class="w-14 h-14 bg-green-100 dark-mode:bg-green-900/30 rounded-2xl flex items-center justify-center mb-6">
@@ -194,13 +194,13 @@ $appName = config('app_name', 'Barcode Attendance System');
             <div class="relative text-center">
                 <div class="w-20 h-20 bg-violet-600 rounded-full flex items-center justify-center mx-auto mb-6 text-white text-2xl font-bold shadow-lg shadow-violet-500/30">1</div>
                 <h3 class="text-xl font-bold theme-text-primary mb-3">Register Students</h3>
-                <p class="theme-text-secondary">Add students to the system. Each student gets a unique barcode ID automatically.</p>
+                <p class="theme-text-secondary">Add students to the system. Each student gets a unique QR code ID automatically.</p>
                 <div class="hidden md:block absolute top-10 left-[60%] w-[80%] h-0.5 bg-gradient-to-r from-violet-500 to-transparent"></div>
             </div>
             <div class="relative text-center">
                 <div class="w-20 h-20 bg-violet-600 rounded-full flex items-center justify-center mx-auto mb-6 text-white text-2xl font-bold shadow-lg shadow-violet-500/30">2</div>
                 <h3 class="text-xl font-bold theme-text-primary mb-3">Scan Attendance</h3>
-                <p class="theme-text-secondary">Teachers scan student barcodes during arrival and dismissal. System records time automatically.</p>
+                <p class="theme-text-secondary">Teachers scan student QR codes during arrival and dismissal. System records time automatically.</p>
                 <div class="hidden md:block absolute top-10 left-[60%] w-[80%] h-0.5 bg-gradient-to-r from-violet-500 to-transparent"></div>
             </div>
             <div class="text-center">
@@ -218,7 +218,7 @@ $appName = config('app_name', 'Barcode Attendance System');
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div>
                 <h2 class="text-3xl sm:text-4xl font-bold theme-text-primary mb-6">Why Choose Our System?</h2>
-                <p class="text-lg theme-text-secondary mb-8">Our barcode attendance system is designed specifically for schools, making attendance tracking effortless.</p>
+                <p class="text-lg theme-text-secondary mb-8">Our QR attendance system is designed specifically for schools, making attendance tracking effortless.</p>
                 <div class="space-y-6">
                     <div class="flex items-start gap-4">
                         <div class="w-10 h-10 bg-green-100 dark-mode:bg-green-900/30 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -230,7 +230,7 @@ $appName = config('app_name', 'Barcode Attendance System');
                         <div class="w-10 h-10 bg-green-100 dark-mode:bg-green-900/30 rounded-xl flex items-center justify-center flex-shrink-0">
                             <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                         </div>
-                        <div><h4 class="font-semibold theme-text-primary mb-1">Improve Accuracy</h4><p class="text-sm theme-text-secondary">Eliminate human errors with automated barcode-based recording.</p></div>
+                        <div><h4 class="font-semibold theme-text-primary mb-1">Improve Accuracy</h4><p class="text-sm theme-text-secondary">Eliminate human errors with automated QR code-based recording.</p></div>
                     </div>
                     <div class="flex items-start gap-4">
                         <div class="w-10 h-10 bg-green-100 dark-mode:bg-green-900/30 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -317,7 +317,7 @@ $appName = config('app_name', 'Barcode Attendance System');
         <div class="flex flex-col md:flex-row items-center justify-between gap-6">
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl overflow-hidden"><img src="<?php echo config('app_url'); ?>/assets/images/lex.png" alt="Logo" class="w-full h-full object-contain"></div>
-                <span class="font-bold theme-text-primary">Barcode Attendance</span>
+                <span class="font-bold theme-text-primary">QR Attendance</span>
             </div>
             <div class="flex items-center gap-6">
                 <a href="#features" class="text-sm theme-text-secondary hover:text-violet-600">Features</a>
