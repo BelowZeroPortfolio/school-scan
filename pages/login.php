@@ -1,8 +1,13 @@
-    <?php
+<?php
 /**
  * Login Page
  * User authentication interface
  */
+
+// Start output buffering to prevent headers sent errors
+if (ob_get_level() == 0) {
+    ob_start();
+}
 
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../includes/db.php';

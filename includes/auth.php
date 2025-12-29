@@ -8,8 +8,8 @@
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/functions.php';
 
-// Start session if not already started
-if (session_status() === PHP_SESSION_NONE) {
+// Start session if not already started and headers haven't been sent
+if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
     session_start();
 }
 

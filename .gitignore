@@ -33,6 +33,8 @@ Thumbs.db
 # Logs
 *.log
 
+*.pid
+
 # Temporary files
 *.tmp
 *.temp

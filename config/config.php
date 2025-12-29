@@ -41,7 +41,7 @@ $config = [
     
     // Application Settings
     'app_name' => 'Lexite Attendance System',
-    'app_url' => getenv('APP_URL') ?: 'http://localhost/school-scan',
+    'app_url' => getenv('APP_URL') ?: 'http://school-scan.local',
     'app_env' => getenv('APP_ENV') ?: 'development',
     'debug' => true,
     'school_name' => 'SAGAY NATIONAL HIGH SCHOOL', // Update this with your school name
@@ -81,8 +81,10 @@ $config = [
     'recaptcha_secret_key' => getenv('RECAPTCHA_SECRET_KEY') ?: '',
 ];
 
-// Make config globally accessible
-$GLOBALS['config'] = $config;
+// Make config globally accessible (only if not already set)
+if (!isset($GLOBALS['config'])) {
+    $GLOBALS['config'] = $config;
+}
 
 /**
  * Get configuration value
@@ -91,18 +93,20 @@ $GLOBALS['config'] = $config;
  * @param mixed $default Default value if key not found
  * @return mixed Configuration value
  */
-function config($key, $default = null) {
-    $keys = explode('.', $key);
-    $value = $GLOBALS['config'];
-    
-    foreach ($keys as $k) {
-        if (!isset($value[$k])) {
-            return $default;
+if (!function_exists('config')) {
+    function config($key, $default = null) {
+        $keys = explode('.', $key);
+        $value = $GLOBALS['config'];
+        
+        foreach ($keys as $k) {
+            if (!isset($value[$k])) {
+                return $default;
+            }
+            $value = $value[$k];
         }
-        $value = $value[$k];
+        
+        return $value;
     }
-    
-    return $value;
 }
 
 return $config;
