@@ -37,6 +37,7 @@ $config = [
     'db_name' => getenv('DB_NAME') ?: 'school',
     'db_user' => getenv('DB_USER') ?: 'root',
     'db_pass' => getenv('DB_PASS') ?: '',
+    'db_port' => getenv('DB_PORT') ?: '3306',
     'db_charset' => 'utf8mb4',
     
     // Application Settings
