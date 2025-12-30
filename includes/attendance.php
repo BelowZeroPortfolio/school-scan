@@ -72,14 +72,15 @@ function hasAttendanceToday($studentId) {
 /**
  * Record attendance for student
  * Associates attendance with the active school year
+ * Automatically calculates late status based on active time schedule
  * 
  * @param int $studentId Student ID
- * @param string $status Attendance status (present, late, absent)
- * @return bool True on success, false on failure
+ * @param string|null $status Attendance status (null = auto-calculate, or 'present', 'late', 'absent')
+ * @return array|false Result array with status info or false on failure
  * 
  * Requirements: 7.4
  */
-function recordAttendance($studentId, $status = 'present') {
+function recordAttendance($studentId, $status = null) {
     try {
         // Check if already scanned today
         if (hasAttendanceToday($studentId)) {
@@ -100,11 +101,47 @@ function recordAttendance($studentId, $status = 'present') {
             $schoolYearId = $activeSchoolYear['id'];
         }
         
+        // Auto-calculate late status if not provided
+        $lateInfo = null;
+        if ($status === null) {
+            require_once __DIR__ . '/time-schedules.php';
+            $lateInfo = calculateLateStatus(date('H:i:s'));
+            
+            // Only mark as late if we have a valid schedule and is_late is true
+            if ($lateInfo && isset($lateInfo['is_late'])) {
+                $status = $lateInfo['is_late'] ? 'late' : 'present';
+            } else {
+                // No active schedule - default to present
+                $status = 'present';
+            }
+        }
+        
         // Insert attendance record with school_year_id
         $sql = "INSERT INTO attendance (student_id, attendance_date, check_in_time, status, recorded_by, school_year_id)
                 VALUES (?, CURDATE(), NOW(), ?, ?, ?)";
         
         dbInsert($sql, [$studentId, $status, $recordedBy, $schoolYearId]);
+        
+        // Record first student scan for teacher attendance monitoring
+        if ($recordedBy) {
+            // Get the teacher for this student's class
+            $teacherSql = "SELECT c.teacher_id 
+                           FROM student_classes sc
+                           INNER JOIN classes c ON sc.class_id = c.id
+                           WHERE sc.student_id = ? AND sc.is_active = 1 AND c.is_active = 1
+                           AND c.school_year_id = ?
+                           LIMIT 1";
+            $classInfo = dbFetchOne($teacherSql, [$studentId, $schoolYearId]);
+            
+            if ($classInfo && $classInfo['teacher_id']) {
+                try {
+                    require_once __DIR__ . '/teacher-attendance.php';
+                    recordFirstStudentScan($classInfo['teacher_id'], date('Y-m-d H:i:s'));
+                } catch (Exception $e) {
+                    // Teacher attendance table might not exist - continue silently
+                }
+            }
+        }
         
         // Log successful attendance
         if (function_exists('logInfo')) {
@@ -112,11 +149,18 @@ function recordAttendance($studentId, $status = 'present') {
                 'student_id' => $studentId,
                 'status' => $status,
                 'recorded_by' => $recordedBy,
-                'school_year_id' => $schoolYearId
+                'school_year_id' => $schoolYearId,
+                'late_info' => $lateInfo
             ]);
         }
         
-        return true;
+        // Return result with late info for display
+        return [
+            'success' => true,
+            'status' => $status,
+            'is_late' => $status === 'late',
+            'late_info' => $lateInfo
+        ];
     } catch (Exception $e) {
         if (function_exists('logError')) {
             logError('Failed to record attendance: ' . $e->getMessage(), [
@@ -644,8 +688,8 @@ function processBarcodeScan($barcode, $mode = 'arrival') {
             ];
         }
         
-        // Record attendance
-        $recorded = recordAttendance($student['id'], 'present');
+        // Record attendance - pass null to auto-calculate late status based on time schedule
+        $recorded = recordAttendance($student['id'], null);
         
         if (!$recorded) {
             return [
@@ -657,6 +701,25 @@ function processBarcodeScan($barcode, $mode = 'arrival') {
             ];
         }
         
+        // Build message with late status if applicable
+        $statusMessage = 'Arrival recorded for ' . $student['first_name'] . ' ' . $student['last_name'];
+        $isLate = false;
+        $lateInfo = null;
+        
+        if (is_array($recorded) && isset($recorded['status'])) {
+            $isLate = $recorded['status'] === 'late';
+            $lateInfo = $recorded['late_info'] ?? null;
+            
+            if ($isLate) {
+                $statusMessage .= ' (LATE)';
+                if ($lateInfo && isset($lateInfo['minutes_late'])) {
+                    $statusMessage .= ' - ' . $lateInfo['minutes_late'] . ' minutes late';
+                }
+            } else {
+                $statusMessage .= ' (On Time)';
+            }
+        }
+        
         // Send notification if function exists and student has SMS enabled
         $notificationResult = null;
         if (function_exists('sendAttendanceNotificationWithStatus')) {
@@ -666,8 +729,10 @@ function processBarcodeScan($barcode, $mode = 'arrival') {
         return [
             'success' => true,
             'student' => $student,
-            'message' => 'Arrival recorded for ' . $student['first_name'] . ' ' . $student['last_name'],
+            'message' => $statusMessage,
             'mode' => 'arrival',
+            'is_late' => $isLate,
+            'late_info' => $lateInfo,
             'notification' => $notificationResult
         ];
     }

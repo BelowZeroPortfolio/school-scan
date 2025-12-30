@@ -54,8 +54,8 @@ $userRole = $currentUser['role'] ?? 'viewer';
                 </a>
             </div>
             
-            <!-- Scan Attendance -->
-            <?php if (in_array($userRole, ['admin', 'operator', 'teacher'])): ?>
+            <!-- Scan Attendance - Admin and Teacher only (Principal monitors, doesn't scan) -->
+            <?php if (in_array($userRole, ['admin', 'teacher'])): ?>
             <div class="mb-1" x-data="{ tooltip: false }">
                 <a href="<?php echo config('app_url'); ?>/scan.php" 
                    @mouseenter="tooltip = sidebarCollapsed" 
@@ -73,7 +73,7 @@ $userRole = $currentUser['role'] ?? 'viewer';
         </div>
 
         <!-- STUDENT MANAGEMENT Section -->
-        <?php if (in_array($userRole, ['admin', 'principal', 'operator', 'teacher'])): ?>
+        <?php if (in_array($userRole, ['admin', 'principal', 'teacher'])): ?>
         <div class="mb-4">
             <div x-show="!sidebarCollapsed" class="px-3 mb-2">
                 <span class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider"><?php echo $userRole === 'principal' ? 'School Overview' : 'Student Management'; ?></span>
@@ -114,8 +114,8 @@ $userRole = $currentUser['role'] ?? 'viewer';
                 </a>
             </div>
             
-            <!-- Generate ID Cards - Admin and Operator only -->
-            <?php if (in_array($userRole, ['admin', 'operator'])): ?>
+            <!-- Generate ID Cards - Admin only -->
+            <?php if ($userRole === 'admin'): ?>
             <div class="mb-1" x-data="{ tooltip: false }">
                 <a href="<?php echo config('app_url'); ?>/pages/generate-id.php"
                    @mouseenter="tooltip = sidebarCollapsed" 
@@ -180,6 +180,21 @@ $userRole = $currentUser['role'] ?? 'viewer';
             </div>
             <div x-show="sidebarCollapsed" class="border-b border-gray-100 mx-2 mb-3"></div>
             
+            <!-- Teacher Monitoring (Admin and Principal) -->
+            <div class="mb-1" x-data="{ tooltip: false }">
+                <a href="<?php echo config('app_url'); ?>/pages/teacher-monitoring.php"
+                   @mouseenter="tooltip = sidebarCollapsed" 
+                   @mouseleave="tooltip = false"
+                   class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-all relative <?php echo $currentPage === 'teacher-monitoring.php' ? 'bg-violet-50 text-violet-700' : 'text-gray-600 hover:bg-gray-50'; ?>"
+                   :class="sidebarCollapsed ? 'justify-center' : ''">
+                    <svg class="w-5 h-5 flex-shrink-0 <?php echo $currentPage === 'teacher-monitoring.php' ? 'text-violet-600' : 'text-gray-400'; ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <span x-show="!sidebarCollapsed" x-transition class="whitespace-nowrap">Teacher Monitoring</span>
+                    <div x-show="tooltip" x-transition class="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">Teacher Monitoring</div>
+                </a>
+            </div>
+
             <!-- Users (Admin only) -->
             <?php if ($userRole === 'admin'): ?>
             <div class="mb-1" x-data="{ tooltip: false }">
@@ -197,7 +212,8 @@ $userRole = $currentUser['role'] ?? 'viewer';
             </div>
             <?php endif; ?>
 
-            <!-- School Years (Admin and Principal view-only) -->
+            <!-- School Years (Admin only) -->
+            <?php if ($userRole === 'admin'): ?>
             <div class="mb-1" x-data="{ tooltip: false }">
                 <a href="<?php echo config('app_url'); ?>/pages/school-years.php"
                    @mouseenter="tooltip = sidebarCollapsed" 
@@ -211,6 +227,7 @@ $userRole = $currentUser['role'] ?? 'viewer';
                     <div x-show="tooltip" x-transition class="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">School Years</div>
                 </a>
             </div>
+            <?php endif; ?>
 
             <!-- Student Placement (Admin only) -->
             <?php if ($userRole === 'admin'): ?>
@@ -229,7 +246,8 @@ $userRole = $currentUser['role'] ?? 'viewer';
             </div>
             <?php endif; ?>
 
-            <!-- System Logs (Admin and Principal view-only) -->
+            <!-- System Logs (Admin only) -->
+            <?php if ($userRole === 'admin'): ?>
             <div class="mb-1" x-data="{ tooltip: false }">
                 <a href="<?php echo config('app_url'); ?>/pages/logs.php"
                    @mouseenter="tooltip = sidebarCollapsed" 
@@ -243,6 +261,7 @@ $userRole = $currentUser['role'] ?? 'viewer';
                     <div x-show="tooltip" x-transition class="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">System Logs</div>
                 </a>
             </div>
+            <?php endif; ?>
             
             <!-- Subscriptions (Admin only) -->
             <?php if ($userRole === 'admin'): ?>
@@ -260,6 +279,21 @@ $userRole = $currentUser['role'] ?? 'viewer';
                 </a>
             </div>
             <?php endif; ?>
+            
+            <!-- Time Schedules (Admin and Principal) -->
+            <div class="mb-1" x-data="{ tooltip: false }">
+                <a href="<?php echo config('app_url'); ?>/pages/time-schedules.php"
+                   @mouseenter="tooltip = sidebarCollapsed" 
+                   @mouseleave="tooltip = false"
+                   class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-all relative <?php echo $currentPage === 'time-schedules.php' ? 'bg-violet-50 text-violet-700' : 'text-gray-600 hover:bg-gray-50'; ?>"
+                   :class="sidebarCollapsed ? 'justify-center' : ''">
+                    <svg class="w-5 h-5 flex-shrink-0 <?php echo $currentPage === 'time-schedules.php' ? 'text-violet-600' : 'text-gray-400'; ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <span x-show="!sidebarCollapsed" x-transition class="whitespace-nowrap">Time Schedules</span>
+                    <div x-show="tooltip" x-transition class="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap z-50">Time Schedules</div>
+                </a>
+            </div>
             
             <!-- Settings (Admin only) -->
             <?php if ($userRole === 'admin'): ?>
@@ -334,7 +368,7 @@ $userRole = $currentUser['role'] ?? 'viewer';
             </div>
 
             <!-- STUDENT MANAGEMENT Section -->
-            <?php if (in_array($userRole, ['admin', 'principal', 'operator', 'teacher'])): ?>
+            <?php if (in_array($userRole, ['admin', 'principal', 'teacher'])): ?>
             <div class="mb-4">
                 <div class="px-3 mb-2">
                     <span class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider"><?php echo $userRole === 'principal' ? 'School Overview' : 'Student Management'; ?></span>
@@ -354,7 +388,7 @@ $userRole = $currentUser['role'] ?? 'viewer';
                         </svg>
                         <?php echo $userRole === 'teacher' ? 'My Students' : 'Students'; ?>
                     </a>
-                    <?php if (in_array($userRole, ['admin', 'operator'])): ?>
+                    <?php if ($userRole === 'admin'): ?>
                     <a href="<?php echo config('app_url'); ?>/pages/generate-id.php" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl <?php echo $currentPage === 'generate-id.php' ? 'bg-violet-50 text-violet-700' : 'text-gray-600 hover:bg-gray-50'; ?>">
                         <svg class="w-5 h-5 <?php echo $currentPage === 'generate-id.php' ? 'text-violet-600' : 'text-gray-400'; ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"/>
@@ -394,6 +428,13 @@ $userRole = $currentUser['role'] ?? 'viewer';
                     <span class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider"><?php echo $userRole === 'principal' ? 'School Administration' : 'Administration'; ?></span>
                 </div>
                 <div class="space-y-1">
+                    <!-- Teacher Monitoring -->
+                    <a href="<?php echo config('app_url'); ?>/pages/teacher-monitoring.php" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl <?php echo $currentPage === 'teacher-monitoring.php' ? 'bg-violet-50 text-violet-700' : 'text-gray-600 hover:bg-gray-50'; ?>">
+                        <svg class="w-5 h-5 <?php echo $currentPage === 'teacher-monitoring.php' ? 'text-violet-600' : 'text-gray-400'; ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Teacher Monitoring
+                    </a>
                     <?php if ($userRole === 'admin'): ?>
                     <a href="<?php echo config('app_url'); ?>/pages/users.php" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl <?php echo $currentPage === 'users.php' ? 'bg-violet-50 text-violet-700' : 'text-gray-600 hover:bg-gray-50'; ?>">
                         <svg class="w-5 h-5 <?php echo $currentPage === 'users.php' ? 'text-violet-600' : 'text-gray-400'; ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -402,12 +443,14 @@ $userRole = $currentUser['role'] ?? 'viewer';
                         Users
                     </a>
                     <?php endif; ?>
+                    <?php if ($userRole === 'admin'): ?>
                     <a href="<?php echo config('app_url'); ?>/pages/school-years.php" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl <?php echo $currentPage === 'school-years.php' ? 'bg-violet-50 text-violet-700' : 'text-gray-600 hover:bg-gray-50'; ?>">
                         <svg class="w-5 h-5 <?php echo $currentPage === 'school-years.php' ? 'text-violet-600' : 'text-gray-400'; ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                         </svg>
                         School Years
                     </a>
+                    <?php endif; ?>
                     <?php if ($userRole === 'admin'): ?>
                     <a href="<?php echo config('app_url'); ?>/pages/student-placement.php" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl <?php echo $currentPage === 'student-placement.php' ? 'bg-violet-50 text-violet-700' : 'text-gray-600 hover:bg-gray-50'; ?>">
                         <svg class="w-5 h-5 <?php echo $currentPage === 'student-placement.php' ? 'text-violet-600' : 'text-gray-400'; ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -416,11 +459,19 @@ $userRole = $currentUser['role'] ?? 'viewer';
                         Student Placement
                     </a>
                     <?php endif; ?>
+                    <?php if ($userRole === 'admin'): ?>
                     <a href="<?php echo config('app_url'); ?>/pages/logs.php" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl <?php echo $currentPage === 'logs.php' ? 'bg-violet-50 text-violet-700' : 'text-gray-600 hover:bg-gray-50'; ?>">
                         <svg class="w-5 h-5 <?php echo $currentPage === 'logs.php' ? 'text-violet-600' : 'text-gray-400'; ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
                         System Logs
+                    </a>
+                    <?php endif; ?>
+                    <a href="<?php echo config('app_url'); ?>/pages/time-schedules.php" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl <?php echo $currentPage === 'time-schedules.php' ? 'bg-violet-50 text-violet-700' : 'text-gray-600 hover:bg-gray-50'; ?>">
+                        <svg class="w-5 h-5 <?php echo $currentPage === 'time-schedules.php' ? 'text-violet-600' : 'text-gray-400'; ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Time Schedules
                     </a>
                     <?php if ($userRole === 'admin'): ?>
                     <a href="<?php echo config('app_url'); ?>/pages/settings.php" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl <?php echo $currentPage === 'settings.php' ? 'bg-violet-50 text-violet-700' : 'text-gray-600 hover:bg-gray-50'; ?>">

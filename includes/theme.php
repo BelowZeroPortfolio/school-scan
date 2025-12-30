@@ -313,6 +313,95 @@
     .dark-mode .student-item:hover {
         background-color: rgba(139, 92, 246, 0.1) !important;
     }
+    
+    /* Additional text colors for better visibility in dark mode */
+    .dark-mode .text-green-600 {
+        color: #34d399 !important;
+    }
+    
+    .dark-mode .text-amber-500 {
+        color: #fbbf24 !important;
+    }
+    
+    .dark-mode .text-amber-600 {
+        color: #f59e0b !important;
+    }
+    
+    .dark-mode .text-red-500 {
+        color: #f87171 !important;
+    }
+    
+    .dark-mode .text-orange-500,
+    .dark-mode .text-orange-600 {
+        color: #fb923c !important;
+    }
+    
+    .dark-mode .text-blue-600 {
+        color: #60a5fa !important;
+    }
+    
+    /* Badge backgrounds for dark mode */
+    .dark-mode .bg-green-100 {
+        background-color: rgba(34, 197, 94, 0.2) !important;
+    }
+    
+    .dark-mode .bg-amber-100 {
+        background-color: rgba(245, 158, 11, 0.2) !important;
+    }
+    
+    .dark-mode .bg-red-100 {
+        background-color: rgba(239, 68, 68, 0.2) !important;
+    }
+    
+    .dark-mode .bg-orange-100 {
+        background-color: rgba(249, 115, 22, 0.2) !important;
+    }
+    
+    .dark-mode .bg-blue-100 {
+        background-color: rgba(59, 130, 246, 0.2) !important;
+    }
+    
+    .dark-mode .bg-blue-50 {
+        background-color: rgba(59, 130, 246, 0.1) !important;
+    }
+    
+    /* Table header backgrounds */
+    .dark-mode thead,
+    .dark-mode .bg-gray-50\/50 {
+        background-color: rgba(31, 41, 55, 0.5) !important;
+    }
+    
+    /* Uppercase text in tables */
+    .dark-mode th {
+        color: #9ca3af !important;
+    }
+    
+    /* Chart legend text */
+    .dark-mode .text-xs {
+        color: #d1d5db !important;
+    }
+    
+    /* Fix specific small text that might be hard to read */
+    .dark-mode p.text-xs,
+    .dark-mode span.text-xs,
+    .dark-mode div.text-xs {
+        color: #d1d5db !important;
+    }
+    
+    /* Ensure font-medium text is visible */
+    .dark-mode .font-medium {
+        color: inherit;
+    }
+    
+    .dark-mode .text-sm.font-medium {
+        color: #f3f4f6 !important;
+    }
+    
+    /* Fix muted text visibility */
+    .dark-mode .text-gray-500.text-xs,
+    .dark-mode .text-gray-500.text-sm {
+        color: #9ca3af !important;
+    }
 </style>
 
 <script>

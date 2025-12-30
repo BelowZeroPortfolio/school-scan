@@ -5,6 +5,11 @@
  * Optimized for GOOJPRT 2D QR Scanner (hardware)
  */
 
+// Temporary error display for debugging
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 require_once __DIR__ . '/config/config.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/auth.php';
@@ -12,12 +17,21 @@ require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/csrf.php';
 require_once __DIR__ . '/includes/notifications.php';
 require_once __DIR__ . '/includes/attendance.php';
+require_once __DIR__ . '/includes/time-schedules.php';
 
-// Require authentication - teachers, operators, or admins can scan
-requireAnyRole(['admin', 'operator', 'teacher']);
+// Require authentication - teachers, principals, or admins can scan
+requireAnyRole(['admin', 'principal', 'teacher']);
 
 $currentUser = getCurrentUser();
 $scanResult = null;
+
+// Get active time schedule for display (with error handling)
+$activeSchedule = null;
+try {
+    $activeSchedule = getActiveTimeSchedule();
+} catch (Exception $e) {
+    // Time schedules table might not exist
+}
 
 // Get scan mode from URL parameter (arrival or dismissal)
 $scanMode = isset($_GET['mode']) && $_GET['mode'] === 'dismissal' ? 'dismissal' : 'arrival';
@@ -30,8 +44,18 @@ if (isPost()) {
     $mode = sanitizeString($_POST['mode'] ?? 'arrival');
     
     if (!empty($barcode)) {
-        $result = processBarcodeScan($barcode, $mode);
-        $_SESSION['scan_result'] = $result;
+        try {
+            $result = processBarcodeScan($barcode, $mode);
+            $_SESSION['scan_result'] = $result;
+        } catch (Exception $e) {
+            $_SESSION['scan_result'] = [
+                'success' => false,
+                'error' => [
+                    'code' => 'SYSTEM_ERROR',
+                    'message' => 'An error occurred while processing the scan. Please try again.'
+                ]
+            ];
+        }
         $_SESSION['scan_mode'] = $mode;
         header('Location: ' . $_SERVER['REQUEST_URI']);
         exit;
@@ -157,11 +181,26 @@ if ($scanResult) {
                                     </svg>
                                 </div>
                                 <div class="flex-1">
-                                    <p class="text-xl font-bold text-emerald-800 dark:text-emerald-200"><?php echo e($scanResult['message']); ?></p>
-                                    <p class="text-sm text-emerald-700 dark:text-emerald-300 mt-1">
+                                    <?php 
+                                    $isLate = isset($scanResult['is_late']) && $scanResult['is_late'];
+                                    $showStatusBadge = ($scanResult['mode'] ?? 'arrival') === 'arrival';
+                                    $statusBadge = '';
+                                    if ($showStatusBadge) {
+                                        $statusBadge = $isLate 
+                                            ? '<span class="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full">LATE</span>'
+                                            : '<span class="ml-2 px-2 py-0.5 bg-green-500 text-white text-xs font-bold rounded-full">ON TIME</span>';
+                                    }
+                                    ?>
+                                    <p class="text-xl font-bold <?php echo $isLate ? 'text-amber-800 dark:text-amber-200' : 'text-emerald-800 dark:text-emerald-200'; ?>">
                                         <?php echo e($scanResult['student']['first_name'] . ' ' . $scanResult['student']['last_name']); ?>
-                                        <span class="mx-1">•</span>
+                                        <?php echo $statusBadge; ?>
+                                    </p>
+                                    <p class="text-sm <?php echo $isLate ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'; ?> mt-1">
                                         LRN: <?php echo e($scanResult['student']['lrn'] ?? $scanResult['student']['student_id']); ?>
+                                        <?php if ($isLate && isset($scanResult['late_info']['minutes_late'])): ?>
+                                            <span class="mx-1">•</span>
+                                            <span class="text-red-600 dark:text-red-400 font-medium"><?php echo $scanResult['late_info']['minutes_late']; ?> minutes late</span>
+                                        <?php endif; ?>
                                     </p>
                                     <?php if (isset($scanResult['notification']['sms'])): ?>
                                         <?php $sms = $scanResult['notification']['sms']; ?>
@@ -342,6 +381,32 @@ if ($scanResult) {
                         </li>
                     </ul>
                 </div>
+
+                <!-- Active Time Schedule -->
+                <?php if ($activeSchedule && $scanMode === 'arrival'): ?>
+                <div class="mt-4 theme-bg-card rounded-2xl p-6 theme-border border">
+                    <h3 class="text-sm font-semibold theme-text-primary mb-3 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Active Schedule: <?php echo e($activeSchedule['name']); ?>
+                    </h3>
+                    <div class="grid grid-cols-3 gap-4 text-center">
+                        <div class="p-3 bg-green-50 dark:bg-green-900/20 rounded-xl">
+                            <div class="text-lg font-bold text-green-600"><?php echo date('g:i A', strtotime($activeSchedule['time_in'])); ?></div>
+                            <div class="text-xs theme-text-muted">Time In</div>
+                        </div>
+                        <div class="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl">
+                            <div class="text-lg font-bold text-amber-600"><?php echo $activeSchedule['late_threshold_minutes']; ?> min</div>
+                            <div class="text-xs theme-text-muted">Grace Period</div>
+                        </div>
+                        <div class="p-3 bg-red-50 dark:bg-red-900/20 rounded-xl">
+                            <div class="text-lg font-bold text-red-600"><?php echo date('g:i A', strtotime($activeSchedule['time_in']) + ($activeSchedule['late_threshold_minutes'] * 60)); ?></div>
+                            <div class="text-xs theme-text-muted">Late After</div>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
             </div>
         </main>
 

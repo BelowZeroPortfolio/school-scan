@@ -77,6 +77,12 @@ function login($username, $password) {
             ]);
         }
         
+        // Record teacher time in for attendance monitoring
+        if ($user['role'] === 'teacher') {
+            require_once __DIR__ . '/teacher-attendance.php';
+            recordTeacherTimeIn($user['id']);
+        }
+        
         // Regenerate CSRF token after login
         if (function_exists('regenerateCsrfToken')) {
             regenerateCsrfToken();
@@ -99,6 +105,12 @@ function login($username, $password) {
 function logout() {
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
+    }
+    
+    // Record teacher time out before clearing session
+    if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role'] === 'teacher') {
+        require_once __DIR__ . '/teacher-attendance.php';
+        recordTeacherTimeOut($_SESSION['user_id']);
     }
     
     // Log logout event
@@ -178,7 +190,7 @@ function getCurrentUser() {
 /**
  * Check if user has specific role
  * 
- * @param string $role Role to check (admin, principal, operator, viewer, teacher)
+ * @param string $role Role to check (admin, principal, teacher)
  * @return bool True if user has role
  */
 function hasRole($role) {
@@ -195,16 +207,8 @@ function hasRole($role) {
     
     // Principal has access to most things except admin-only features
     if ($userRole === 'principal') {
-        // Principal can access operator and viewer level features
-        if (in_array($role, ['operator', 'viewer', 'principal'])) {
-            return true;
-        }
-    }
-    
-    // Teacher has operator-level access for attendance and student management
-    if ($userRole === 'teacher') {
-        // Teachers can access operator-level features (scanning, student management)
-        if ($role === 'operator' || $role === 'viewer') {
+        // Principal can access teacher-level features
+        if (in_array($role, ['teacher', 'principal'])) {
             return true;
         }
     }

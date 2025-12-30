@@ -4,6 +4,9 @@
  * Direct configuration for localhost
  */
 
+// Set timezone to Philippines
+date_default_timezone_set('Asia/Manila');
+
 // Load Composer autoloader
 $autoloadPath = __DIR__ . '/../vendor/autoload.php';
 if (file_exists($autoloadPath)) {
